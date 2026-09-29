@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>浮遊島×空賊 テスト版</title>
+<title>SkyPirates テスト版</title>
 <style>
 :root{
   --bg:#eef3f9; --panel:#ffffff; --ink:#1b2430; --sub:#5b6878; --line:#d5dde8;
@@ -450,7 +450,7 @@ function doAct(a){
 
 /* ================= 画面 ================= */
 function renderMsg(m,isErr){
-  $("#app").innerHTML=`<h1>浮遊島×空賊 テスト版</h1><div class="panel">${esc(m)}</div>${isErr?`<button onclick="location.href=location.pathname">タイトルに戻る</button>`:""}`;
+  $("#app").innerHTML=`<h1>SkyPirates テスト版</h1><div class="panel">${esc(m)}</div>${isErr?`<button onclick="location.href=location.pathname">タイトルに戻る</button>`:""}`;
 }
 function renderTitle(){
   const params=new URLSearchParams(location.search);const room=params.get("room")||"";
@@ -458,7 +458,7 @@ function renderTitle(){
   const hasLocal=!!localStorage.getItem("ukishima_local");
   let lastGuest=null;try{lastGuest=JSON.parse(localStorage.getItem("ukishima_last_guest")||"null")}catch(e){}
   $("#app").innerHTML=`
-  <h1>浮遊島×空賊 テスト版</h1>
+  <h1>SkyPirates テスト版</h1>
   <div class="sub">${esc(VERSION)}</div>
   <div class="panel">
     <h2 style="margin-top:0">部屋に参加する</h2>
@@ -489,7 +489,7 @@ function renderTitle(){
 function render(){
   const v=S.view;if(!v){renderTitle();return}
   const app=$("#app");
-  let h=`<div class="row"><h1 class="grow">浮遊島×空賊</h1><span class="sub">${S.mode==="local"?"1台モード":"部屋 "+esc(S.code)}</span></div>`;
+  let h=`<div class="row"><h1 class="grow">SkyPirates</h1><span class="sub">${S.mode==="local"?"1台モード":"部屋 "+esc(S.code)}</span></div>`;
   if(S.mode==="local"){
     h+=`<div class="tabs">${S.game.players.map(p=>`<button class="${p.id===S.seat?"on primary":""}" data-seat="${p.id}">${esc(p.name)}${p.ts.ended||(S.game.phase==="setup"&&p.setupDone)||(S.game.phase==="inspect"&&p.inspectDone)?" ✓":""}</button>`).join("")}</div>`;
   }
@@ -639,7 +639,7 @@ function openSell(){
 }
 function exportLog(){
   const blob=new Blob([JSON.stringify(S.game,null,1)],{type:"application/json"});
-  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`ukishima_${new Date().toISOString().slice(0,10)}.json`;a.click();
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`skypirates_${new Date().toISOString().slice(0,10)}.json`;a.click();
 }
 function bind(){
   const on=(id,f)=>{const e=document.getElementById(id);if(e)e.onclick=f};
