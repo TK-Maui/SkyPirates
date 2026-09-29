@@ -1,0 +1,677 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>浮遊島×空賊 テスト版</title>
+<style>
+:root{
+  --bg:#eef3f9; --panel:#ffffff; --ink:#1b2430; --sub:#5b6878; --line:#d5dde8;
+  --accent:#2f6fd6; --accent-ink:#fff; --warn:#c2410c; --ok:#15803d;
+  --cell:#e7f0e3; --cell-enemy:#f6dcdc; --hi:#fde68a; --king:#b45309;
+  --mine:#8b6f4e; --lab:#3b82b0; --shrine:#a0529b; --base:#475569; --wh:#6b7f3a; --mk:#b7791f; --lm:#c0392b;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1620; --panel:#18212d; --ink:#e6edf5; --sub:#98a6b8; --line:#2b3746;
+    --accent:#5b93ee; --accent-ink:#0b1220; --warn:#fb923c; --ok:#4ade80;
+    --cell:#1f3326; --cell-enemy:#3a2226; --hi:#6b5b17; --king:#f59e0b;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Hiragino Sans","Noto Sans JP",sans-serif;font-size:15px;line-height:1.5}
+body{padding:12px 16px 80px;max-width:760px;margin:0 auto}
+h1{font-size:20px;margin:8px 0 4px}
+h2{font-size:16px;margin:16px 0 8px}
+.sub{color:var(--sub);font-size:13px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;margin:10px 0}
+button{font:inherit;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:10px;padding:9px 12px;cursor:pointer;min-height:40px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:600}
+button.on{outline:2px solid var(--accent);outline-offset:1px}
+button:disabled{opacity:.45;cursor:not-allowed}
+input,select{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:var(--panel);color:var(--ink);min-height:40px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grow{flex:1}
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.tabs button{white-space:nowrap}
+.stat{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.stat div{background:var(--bg);border-radius:8px;padding:6px 8px;font-size:13px}
+.stat b{font-size:15px}
+.board{display:grid;grid-template-columns:22px repeat(8,1fr);gap:3px;width:100%;max-width:440px;margin:8px auto}
+.board .lab{font-size:11px;color:var(--sub);display:flex;align-items:center;justify-content:center}
+.cell{aspect-ratio:1;border-radius:6px;background:var(--cell);border:1px solid var(--line);position:relative;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#fff;padding:0;min-height:0}
+.cell[data-ro]{cursor:default}
+.cell.enemy{background:var(--cell-enemy)}
+.cell.target{box-shadow:inset 0 0 0 3px var(--accent);background:var(--hi)}
+.cell .b{position:absolute;inset:3px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-direction:column;line-height:1.05;text-align:center}
+.cell .b small{font-size:9px;font-weight:600;opacity:.9}
+.cell .b.closed{background:var(--panel)!important;color:var(--ink);border:2px dashed var(--sub)}
+.cell .k{position:absolute;right:1px;top:-2px;font-size:14px}
+.b.mine{background:var(--mine)}.b.lab{background:var(--lab)}.b.shrine{background:var(--shrine)}
+.b.base{background:var(--base)}.b.warehouse{background:var(--wh)}.b.market{background:var(--mk)}.b.landmark{background:var(--lm)}
+.cloud{aspect-ratio:1;max-width:440px;margin:8px auto;border-radius:12px;background:repeating-linear-gradient(45deg,var(--line),var(--line) 10px,var(--bg) 10px,var(--bg) 20px);display:flex;align-items:center;justify-content:center;color:var(--sub)}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
+td.n,th.n{text-align:right}
+.menu button{width:100%;text-align:left;margin:3px 0;display:flex;justify-content:space-between;gap:8px}
+.menu button span.c{color:var(--sub);font-size:12px}
+.log{max-height:180px;overflow:auto;font-size:12px;color:var(--sub)}
+.toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;max-width:90vw;z-index:10;font-size:14px}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;background:var(--bg);border:1px solid var(--line)}
+.pill.ok{color:var(--ok);border-color:var(--ok)}
+.hint{background:var(--bg);border-radius:8px;padding:8px 10px;font-size:13px;margin:6px 0}
+.hidden{display:none!important}
+dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);color:var(--ink);max-width:92vw;width:420px}
+dialog::backdrop{background:rgba(0,0,0,.4)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<dialog id="dlg"></dialog>
+<script>
+"use strict";
+/* ================= 定数 ================= */
+const VERSION = "v0.1（第1段階：労働・建設・売却・視察・得点）";
+const RES = ["ishi","taku","hane","kumo","kome","mizu"];
+const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
+const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
+const FAC = {
+  mine:{name:"採掘製鉄所",short:"採掘",prod:["ishi","taku"]},
+  lab:{name:"研究所",short:"研究",prod:["hane","kumo"]},
+  shrine:{name:"神域",short:"神域",prod:["kome","mizu"]},
+};
+const LV_SUPPLY = {1:2,2:4,3:8,4:8};
+const ROULETTE = [1,5,2,3,4,2,3,4];
+const COLS = "ABCDEFGH";
+const BUILD = {
+  mine:{name:"採掘製鉄所（追加）",money:2000,res:{ishi:10,taku:10}},
+  lab:{name:"研究所（追加）",money:2000,res:{hane:10,kumo:10}},
+  shrine:{name:"神域（追加）",money:2000,res:{kome:10,mizu:10}},
+  base:{name:"空賊基地 Lv1",money:1500,res:{ishi:7,taku:7}},
+  warehouse:{name:"資材倉庫",money:1500,res:{hane:5,kumo:5}},
+};
+const BASE_UP = {2:{money:1500,res:{ishi:8,taku:8}},3:{money:2000,res:{ishi:12,taku:12,kumo:10}}};
+const LANDMARKS = [
+  {id:"izumi",name:"黄金の泉",eff:"毎ターンの支給金額 +1,000マリー",money:4000,res:{ishi:15,taku:15},cond:"なし",ok:p=>true},
+  {id:"noroshi",name:"狼煙の塔",eff:"1回の侵略に出せるキャラ 6体→7体",money:3000,res:{ishi:10,taku:10,kumo:10},cond:"空賊基地Lv2以上を1つ",ok:p=>baseMaxLv(p)>=2},
+  {id:"toudai",name:"不眠の灯台",eff:"休息が不要になる",money:1500,res:{hane:20,kumo:15},cond:"研究所を2つ",ok:p=>countFac(p,"lab")>=2},
+  {id:"jousai",name:"不落の城砦",eff:"自分の建物とランドマークの耐久 +2",money:2500,res:{ishi:18,taku:18},cond:"資材倉庫を1つ",ok:p=>countKind(p,"warehouse")>=1},
+  {id:"kinko",name:"強欲の金庫",eff:"略奪品が3倍",money:3000,res:{hane:15,kome:15},cond:"空賊基地Lv2以上を1つ",ok:p=>baseMaxLv(p)>=2},
+  {id:"saidan",name:"再生の祭壇",eff:"修繕が1ターン後に完了・費用半額",money:3000,res:{kome:15,mizu:15},cond:"なし",ok:p=>true},
+];
+const LM = Object.fromEntries(LANDMARKS.map(l=>[l.id,l]));
+const TOTAL_TURNS = 20, INSPECT_AFTER = 10;
+
+/* ================= ユーティリティ ================= */
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const yen = n=>n.toLocaleString("ja-JP")+"マリー";
+const sq = (r,c)=>`${r+1}-${COLS[c]}`;
+const idx = (r,c)=>r*8+c;
+const rnd = n=>Math.floor(Math.random()*n);
+const shuffle = a=>{for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
+const clone = o=>JSON.parse(JSON.stringify(o));
+const resText = r=>Object.entries(r).map(([k,v])=>RES_JA[k]+v).join("・");
+function toast(msg){const t=document.createElement("div");t.className="toast";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600)}
+function makeCode(){const s="ABCDEFGHJKLMNPQRSTUVWXYZ23456789";let c="";for(let i=0;i<5;i++)c+=s[rnd(s.length)];return c}
+
+/* ================= ルールエンジン（純粋な状態操作） ================= */
+function cells(p){return p.grid}
+function countKind(p,kind){return p.grid.filter(b=>b&&b.kind===kind&&(b.opened!==false)).length}
+function countFac(p,fac){return p.grid.filter(b=>b&&b.kind==="fac"&&b.fac===fac&&b.opened).length}
+function baseMaxLv(p){return Math.max(0,...p.grid.filter(b=>b&&b.kind==="base").map(b=>b.level))}
+function facLevel(b,turn){if(b.lv4)return 4;const d=turn-b.openedTurn;return d>=5?3:d>=2?2:1}
+function cap(p){return 20+10*countKind(p,"warehouse")}
+function landmarkBuilt(p){return p.grid.find(b=>b&&b.kind==="landmark")}
+function moneySupply(p,turn){
+  let m=500;
+  const lm=landmarkBuilt(p);
+  if(lm&&lm.lm==="izumi"&&lm.builtTurn<turn)m+=1000;
+  m+=300*p.grid.filter(b=>b&&b.kind==="base"&&b.level>=4).length;
+  return m;
+}
+function canAfford(p,cost){if(p.money<cost.money)return false;for(const[k,v]of Object.entries(cost.res||{}))if(p.res[k]<v)return false;return true}
+function pay(p,cost){p.money-=cost.money;for(const[k,v]of Object.entries(cost.res||{}))p.res[k]-=v}
+function lackText(p,cost){const l=[];if(p.money<cost.money)l.push("お金"+(cost.money-p.money));for(const[k,v]of Object.entries(cost.res||{}))if(p.res[k]<v)l.push(RES_JA[k]+(v-p.res[k]));return l.join("・")}
+function logP(g,p,msg){p.log.unshift(`T${g.turn||0}：${msg}`);if(p.log.length>80)p.log.length=80}
+function logG(g,msg){g.log.push({turn:g.turn,msg,at:Date.now()})}
+
+function newPlayer(id,name){
+  return {id,name,token:null,connected:true,landmarkId:null,king:null,money:0,res:{},grid:Array(64).fill(null),owner:Array(64).fill(id),
+    ts:{moved:false,action:null,sold:0,soldTypes:[],ended:false},undo:[],setupDone:false,inspectDone:false,log:[],stats:{labor:0,build:0,none:0,laborMoney:0,sold:0,lost:0}};
+}
+function newGame(){return {v:1,phase:"lobby",turn:0,round:1,players:[],log:[],createdAt:Date.now()}}
+
+function startSetup(g){
+  const lms=shuffle(LANDMARKS.map(l=>l.id));
+  g.players.forEach((p,i)=>{
+    p.landmarkId=lms[i%lms.length];
+    p.money=1500; // 開始時の労働（必ず3倍）
+    RES.forEach(r=>p.res[r]=10);
+    logP(g,p,`ランドマーク抽選：${LM[p.landmarkId].name}／開始時の労働で1,500マリー／資材各10個`);
+  });
+  g.phase="setup";
+  logG(g,"準備開始");
+}
+function genChain(kr,kc){
+  for(let tries=0;tries<300;tries++){
+    const path=[[kr,kc]];let ok=true;
+    for(let d=1;d<=3;d++){
+      const [lr,lc]=path[path.length-1];const cand=[];
+      for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){
+        if(!dr&&!dc)continue;const nr=lr+dr,nc=lc+dc;
+        if(nr<0||nr>7||nc<0||nc>7||nr>kr)continue;
+        if(Math.max(Math.abs(nr-kr),Math.abs(nc-kc))!==d)continue;
+        cand.push([nr,nc]);
+      }
+      if(!cand.length){ok=false;break}
+      path.push(cand[rnd(cand.length)]);
+    }
+    if(ok)return path.slice(1);
+  }
+  return null;
+}
+function placeKing(g,p,r,c){
+  if(g.phase!=="setup")return "今はキングを置けません";
+  if(p.setupDone)return "もう置いています";
+  if(r<6)return "キングは7列目か8列目に置いてください";
+  const chain=genChain(r,c);if(!chain)return "その場所には置けません";
+  p.king={r,c};
+  const types=shuffle(["mine","lab","shrine"]);
+  chain.forEach(([cr,cc],i)=>{p.grid[idx(cr,cc)]={kind:"fac",fac:types[i],opened:false,openedTurn:null,initial:true}});
+  p.grid[idx(2,c)]={kind:"market",opened:false,openedTurn:null,initial:true};
+  p.setupDone=true;
+  logP(g,p,`キングを${sq(r,c)}に配置。生産施設：${chain.map(([a,b],i)=>FAC[types[i]].name+"("+sq(a,b)+")").join("→")}／売却所：${sq(2,c)}`);
+  if(g.players.every(q=>q.setupDone))startTurn(g,1);
+  return null;
+}
+function startTurn(g,t){
+  g.turn=t;g.phase="turn";
+  for(const p of g.players){
+    const m=moneySupply(p,t);p.money+=m;
+    const c=cap(p);const add={};RES.forEach(r=>add[r]=0);
+    p.grid.forEach(b=>{if(b&&b.kind==="fac"&&b.opened&&b.openedTurn<t){const lv=facLevel(b,t);FAC[b.fac].prod.forEach(r=>add[r]+=LV_SUPPLY[lv])}});
+    let lost=0;
+    RES.forEach(r=>{const want=p.res[r]+add[r];const v=Math.min(Math.max(c,p.res[r]),want);lost+=want-v;p.res[r]=v});
+    p.stats.lost+=lost;
+    p.ts={moved:false,action:null,sold:0,soldTypes:[],ended:false};p.undo=[];
+    const addTxt=RES.filter(r=>add[r]).map(r=>RES_JA[r]+add[r]).join("・")||"なし";
+    logP(g,p,`支給：${yen(m)}／資材 ${addTxt}${lost?`（上限超過で${lost}個消滅）`:""}`);
+  }
+  logG(g,`ターン${t}開始`);
+}
+function snap(p){p.undo.push(JSON.stringify({money:p.money,res:p.res,grid:p.grid,king:p.king,ts:p.ts,stats:p.stats}))}
+function applyAction(g,pid,a){
+  const p=g.players.find(q=>q.id===pid);if(!p)return "プレイヤーが見つかりません";
+  switch(a.kind){
+    case "placeKing": return placeKing(g,p,a.r,a.c);
+    case "inspectDone":
+      if(g.phase!=="inspect")return "視察フェーズではありません";
+      p.inspectDone=true;
+      if(g.players.every(q=>q.inspectDone))startTurn(g,INSPECT_AFTER+1);
+      return null;
+    case "unend":
+      if(g.phase!=="turn"||!p.ts.ended)return "取り消せません";
+      p.ts.ended=false;return null;
+  }
+  if(g.phase!=="turn")return "今は操作できません";
+  if(p.ts.ended)return "このターンはもう終了しています（「終了を取り消す」で戻せます）";
+  switch(a.kind){
+    case "move":{
+      if(p.ts.moved)return "キングの移動は1ターンに1回です";
+      if(p.ts.action)return "キングの移動はアクションより前（支給フェーズ）に行います";
+      const {r,c}=a;const dr=Math.abs(r-p.king.r),dc=Math.abs(c-p.king.c);
+      if(r<0||r>7||c<0||c>7||Math.max(dr,dc)!==1)return "キングは周囲8マスのどれかに1マスだけ動けます";
+      if(p.owner[idx(r,c)]!==p.id)return "敵に取られたマスには移動できません";
+      snap(p);
+      p.king={r,c};p.ts.moved=true;
+      const b=p.grid[idx(r,c)];let msg=`キングを${sq(r,c)}へ移動`;
+      if(b&&(b.kind==="fac"||b.kind==="market")&&!b.opened){
+        b.opened=true;b.openedTurn=g.turn;
+        msg+=`、${b.kind==="fac"?FAC[b.fac].name:"売却所"}を開放（1ターン後から${b.kind==="fac"?"支給":"売却可能"}）`;
+      }
+      logP(g,p,msg);return null;
+    }
+    case "sell":{
+      const m=p.grid.find(b=>b&&b.kind==="market");
+      if(!m||!m.opened)return "売却所がまだ開放されていません";
+      if(m.openedTurn>=g.turn)return "売却所は開放した1ターン後から使えます";
+      const n=a.n|0;if(n<1)return "個数を入れてください";
+      if(!RES.includes(a.res))return "資材を選んでください";
+      if(p.res[a.res]<n)return "その資材が足りません";
+      if(p.ts.sold+n>10)return `1ターンに売れるのは10個までです（あと${10-p.ts.sold}個）`;
+      const types=new Set(p.ts.soldTypes);types.add(a.res);if(types.size>2)return "1ターンに売れる資材は2種類までです";
+      snap(p);
+      p.res[a.res]-=n;p.money+=50*n;p.ts.sold+=n;p.ts.soldTypes=[...types];p.stats.sold+=n;
+      logP(g,p,`${RES_FULL[a.res]}を${n}個売却（+${yen(50*n)}）`);return null;
+    }
+    case "labor":{
+      if(p.ts.action)return p.ts.action==="labor"?"労働は済んでいます":"このターンは建設を選んでいます（1ターン1アクション）";
+      const roll=ROULETTE[rnd(8)];const gain=roll*moneySupply(p,g.turn);
+      p.money+=gain;p.ts.action="labor";p.undo=[];p.stats.labor++;p.stats.laborMoney+=gain;
+      logP(g,p,`労働：ルーレット${roll} → +${yen(gain)}`);return null;
+    }
+    case "build":{
+      if(p.ts.action==="labor")return "このターンは労働を選んでいます（1ターン1アクション）";
+      const {r,c,what}=a;const i=idx(r,c);
+      if(p.grid[i])return "そこには建物があります";
+      if(p.king.r===r&&p.king.c===c)return "キングのいるマスには建てられません";
+      if(p.owner[i]!==p.id)return "自分の領土にしか建てられません";
+      let cost,b,label;
+      if(what==="landmark"){
+        const lm=LM[p.landmarkId];
+        if(landmarkBuilt(p))return "ランドマークは1島に1つまでです";
+        if(!lm.ok(p))return `建設条件を満たしていません（${lm.cond}）`;
+        cost={money:lm.money,res:lm.res};b={kind:"landmark",lm:lm.id,builtTurn:g.turn};label=lm.name;
+      }else if(FAC[what]){
+        cost=BUILD[what];b={kind:"fac",fac:what,opened:true,openedTurn:g.turn};label=FAC[what].name;
+      }else if(what==="base"){cost=BUILD.base;b={kind:"base",level:1,builtTurn:g.turn};label="空賊基地";
+      }else if(what==="warehouse"){cost=BUILD.warehouse;b={kind:"warehouse",builtTurn:g.turn};label="資材倉庫";
+      }else return "建てられないものです";
+      if(!canAfford(p,cost))return `足りません：${lackText(p,cost)}`;
+      snap(p);pay(p,cost);p.grid[i]=b;
+      if(p.ts.action!=="build"){p.ts.action="build";p.stats.build++}
+      logP(g,p,`${label}を${sq(r,c)}に建設（${yen(cost.money)}${cost.res&&Object.keys(cost.res).length?"＋"+resText(cost.res):""}）`);return null;
+    }
+    case "upgrade":{
+      if(p.ts.action==="labor")return "このターンは労働を選んでいます（1ターン1アクション）";
+      const b=p.grid[idx(a.r,a.c)];
+      if(!b||b.kind!=="base")return "空賊基地ではありません";
+      if(b.level>=3)return "同盟・覚醒なしの上限はLv3です";
+      const cost=BASE_UP[b.level+1];
+      if(!canAfford(p,cost))return `足りません：${lackText(p,cost)}`;
+      snap(p);pay(p,cost);b.level++;
+      if(p.ts.action!=="build"){p.ts.action="build";p.stats.build++}
+      logP(g,p,`空賊基地(${sq(a.r,a.c)})をLv${b.level}に強化`);return null;
+    }
+    case "undo":{
+      if(!p.undo.length)return "取り消せる操作がありません";
+      const s=JSON.parse(p.undo.pop());
+      if(s.ts.action!=="build"&&p.ts.action==="build")p.stats.build--;
+      Object.assign(p,{money:s.money,res:s.res,grid:s.grid,king:s.king,ts:s.ts,stats:s.stats});
+      logP(g,p,"直前の操作を取り消し");return null;
+    }
+    case "endTurn":{
+      p.ts.ended=true;
+      if(!p.ts.action)p.stats.none++;
+      if(g.players.every(q=>q.ts.ended))advance(g);
+      return null;
+    }
+  }
+  return "不明な操作です";
+}
+function advance(g){
+  // 行動なしで終えた人のカウントを確定済み。次へ。
+  if(g.turn===INSPECT_AFTER){g.phase="inspect";g.players.forEach(p=>p.inspectDone=false);logG(g,"視察フェーズ");return}
+  if(g.turn>=TOTAL_TURNS){g.phase="result";logG(g,"ラウンド終了");return}
+  startTurn(g,g.turn+1);
+}
+function score(g,p){
+  const own=p.owner.filter(o=>o===p.id).length;
+  const territory=own-64; // 他の島で取った領土は第2段階で加算
+  const flags=0;
+  const lm=landmarkBuilt(p)?1:0;
+  const others=p.grid.filter(b=>b&&b.kind!=="landmark"&&b.opened!==false).length;
+  const buildings=lm*5+others*2;
+  const destroy=0;
+  const money=Math.floor(p.money/1000);
+  return {territory,flags,lm,others,buildings,destroy,money,total:territory+flags+buildings+destroy+money};
+}
+/* 見せてよい情報だけに絞る */
+function viewFor(g,pid){
+  const reveal=g.phase==="inspect"||g.phase==="result"||g.turn>INSPECT_AFTER;
+  const me=g.players.find(p=>p.id===pid);
+  return {phase:g.phase,turn:g.turn,round:g.round,me:me?publicSelf(me,g):null,
+    others:g.players.filter(p=>p.id!==pid).map(p=>({id:p.id,name:p.name,connected:p.connected,setupDone:p.setupDone,ended:p.ts.ended,inspectDone:p.inspectDone,
+      board:reveal?{grid:p.grid,owner:p.owner,king:p.king,landmarkId:p.landmarkId}:null,
+      score:g.phase==="result"?score(g,p):null,money:g.phase==="result"?p.money:null})),
+    lobby:g.players.map(p=>({id:p.id,name:p.name,connected:p.connected}))};
+}
+function publicSelf(p,g){const o=clone(p);delete o.token;o.undoCount=p.undo.length;delete o.undo;o.cap=cap(p);o.supply=moneySupply(p,g.turn);o.score=score(g,p);return o}
+
+/* ================= 通信 ================= */
+const S = {mode:null,game:null,seat:null,view:null,code:null,peer:null,conns:new Map(),hostConn:null,ui:{mode:null,build:null,tab:"me"},myName:""};
+
+function loadPeerJS(){
+  return new Promise((res,rej)=>{
+    if(window.Peer)return res();
+    const s=document.createElement("script");
+    s.src="https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js";
+    s.onload=()=>res();s.onerror=()=>rej(new Error("通信ライブラリを読み込めませんでした"));
+    document.head.appendChild(s);
+  });
+}
+/* テスト用：同じブラウザ内のタブ間通信（?transport=bc） */
+function bcTransport(){
+  class BCConn{constructor(ch,self,other){this.ch=ch;this.self=self;this.peer=other;this.h={};this.open=true}
+    on(e,f){(this.h[e]=this.h[e]||[]).push(f)} emit(e,x){(this.h[e]||[]).forEach(f=>f(x))}
+    send(d){this.ch.postMessage({to:this.peer,from:this.self,d})}}
+  class BCPeer{constructor(id){this.id=id||("g"+Math.random().toString(36).slice(2,8));this.h={};this.conns={};
+      this.ch=new BroadcastChannel("ukishima-test");
+      this.ch.onmessage=e=>{const m=e.data;if(m.to!==this.id)return;
+        if(m.hello){const c=new BCConn(this.ch,this.id,m.from);this.conns[m.from]=c;this.emit("connection",c);setTimeout(()=>{c.emit("open");this.ch.postMessage({to:m.from,from:this.id,ack:true})},10);return}
+        if(m.ack){const c=this.conns[m.from];c&&c.emit("open");return}
+        const c=this.conns[m.from];c&&c.emit("data",m.d)};
+      setTimeout(()=>this.emit("open",this.id),10)}
+    on(e,f){(this.h[e]=this.h[e]||[]).push(f)} emit(e,x){(this.h[e]||[]).forEach(f=>f(x))}
+    connect(id){const c=new BCConn(this.ch,this.id,id);this.conns[id]=c;this.ch.postMessage({to:id,from:this.id,hello:true});return c}}
+  return BCPeer;
+}
+const TEST_BC = new URLSearchParams(location.search).get("transport")==="bc";
+async function makePeer(id){
+  if(TEST_BC){const P=bcTransport();return new P(id)}
+  await loadPeerJS();return id?new Peer(id,{debug:1}):new Peer({debug:1});
+}
+const peerId = code=>"ukishima-kuzoku-"+code;
+
+function saveHost(){try{localStorage.setItem("ukishima_host_"+S.code,JSON.stringify(S.game));localStorage.setItem("ukishima_last_host",S.code)}catch(e){}}
+function broadcast(){
+  if(S.mode==="host"){
+    for(const [pid,conn] of S.conns){try{conn.open!==false&&conn.send({t:"state",view:viewFor(S.game,pid),code:S.code})}catch(e){}}
+    saveHost();
+  }
+  S.view=viewFor(S.game,S.seat);render();
+}
+async function hostCreate(name,resumeCode){
+  S.mode="host";S.code=resumeCode||makeCode();
+  if(resumeCode){S.game=JSON.parse(localStorage.getItem("ukishima_host_"+resumeCode));S.game.players.forEach(p=>{if(p.id!=="P1")p.connected=false})}
+  else{S.game=newGame();const p=newPlayer("P1",name);S.game.players.push(p)}
+  S.seat="P1";
+  renderMsg("部屋を作っています…");
+  let peer;
+  try{peer=await makePeer(peerId(S.code))}catch(e){renderMsg(e.message,true);return}
+  S.peer=peer;
+  peer.on("open",()=>{broadcast()});
+  peer.on("error",e=>{
+    if(e.type==="unavailable-id"){renderMsg("前の接続がまだ残っています。10秒ほど待ってからもう一度「再開」を押してください。",true)}
+    else toast("通信エラー："+(e.type||e.message));
+  });
+  peer.on("disconnected",()=>{try{peer.reconnect()}catch(e){}});
+  peer.on("connection",conn=>{
+    conn.on("data",msg=>hostOnData(conn,msg));
+    conn.on("close",()=>{for(const [pid,c] of S.conns)if(c===conn){S.conns.delete(pid);const p=S.game.players.find(q=>q.id===pid);if(p){p.connected=false}broadcast()}});
+  });
+}
+function hostOnData(conn,msg){
+  const g=S.game;
+  if(msg.t==="join"){
+    let p=msg.token&&g.players.find(q=>q.token===msg.token);
+    if(!p){
+      if(g.phase!=="lobby"){conn.send({t:"err",msg:"ゲームはもう始まっています（前に参加した端末からなら再参加できます）"});return}
+      if(g.players.length>=6){conn.send({t:"err",msg:"満員です（最大6人）"});return}
+      p=newPlayer("P"+(g.players.length+1),String(msg.name||"プレイヤー").slice(0,12));p.token=msg.token;g.players.push(p);
+      toast(`${p.name}さんが参加しました`);
+    }else toast(`${p.name}さんが再接続しました`);
+    p.connected=true;S.conns.set(p.id,conn);
+    conn.send({t:"welcome",pid:p.id,code:S.code});
+    broadcast();return;
+  }
+  if(msg.t==="act"){
+    let pid=null;for(const [k,c] of S.conns)if(c===conn)pid=k;
+    if(!pid)return;
+    const err=applyAction(g,pid,msg.a);
+    if(err)conn.send({t:"err",msg:err});
+    broadcast();
+  }
+}
+function getToken(code){const k="ukishima_tok_"+code;let t=localStorage.getItem(k);if(!t){t=Math.random().toString(36).slice(2)+Date.now().toString(36);try{localStorage.setItem(k,t)}catch(e){}}return t}
+async function guestJoin(code,name){
+  S.mode="guest";S.code=code.toUpperCase();S.myName=name;
+  renderMsg("部屋に接続しています…");
+  let peer;try{peer=await makePeer()}catch(e){renderMsg(e.message,true);return}
+  S.peer=peer;
+  const connect=()=>{
+    const conn=peer.connect(peerId(S.code),{reliable:true,serialization:"json"});
+    S.hostConn=conn;
+    const timer=setTimeout(()=>{if(!S.view)renderMsg("部屋が見つかりません。部屋番号を確かめるか、作った人の画面が開いているか確認してください。",true)},12000);
+    conn.on("open",()=>{clearTimeout(timer);conn.send({t:"join",name,token:getToken(S.code)})});
+    conn.on("data",msg=>{
+      if(msg.t==="welcome"){S.seat=msg.pid;try{localStorage.setItem("ukishima_last_guest",JSON.stringify({code:S.code,name}))}catch(e){}}
+      else if(msg.t==="state"){S.view=msg.view;render()}
+      else if(msg.t==="err"){toast(msg.msg);if(!S.view)renderMsg(msg.msg,true)}
+    });
+    conn.on("close",()=>{toast("接続が切れました。「再接続」を押してください");S.lost=true;render()});
+  };
+  peer.on("open",connect);
+  peer.on("error",e=>{if(e.type==="peer-unavailable")renderMsg("部屋が見つかりません。部屋番号を確かめるか、作った人の画面が開いているか確認してください。",true);else toast("通信エラー："+(e.type||e.message))});
+  S.reconnect=()=>{S.lost=false;connect()};
+}
+function localStart(names){
+  S.mode="local";S.code="LOCAL";S.game=newGame();
+  names.forEach((n,i)=>S.game.players.push(newPlayer("P"+(i+1),n)));
+  S.seat="P1";startSetup(S.game);broadcast();
+}
+function doAct(a){
+  if(S.mode==="guest"){if(!S.hostConn||S.lost){toast("接続されていません");return}S.hostConn.send({t:"act",a});return}
+  const err=applyAction(S.game,S.seat,a);if(err)toast(err);
+  if(S.mode==="local"){try{localStorage.setItem("ukishima_local",JSON.stringify(S.game))}catch(e){}}
+  broadcast();
+}
+
+/* ================= 画面 ================= */
+function renderMsg(m,isErr){
+  $("#app").innerHTML=`<h1>浮遊島×空賊 テスト版</h1><div class="panel">${esc(m)}</div>${isErr?`<button onclick="location.href=location.pathname">タイトルに戻る</button>`:""}`;
+}
+function renderTitle(){
+  const params=new URLSearchParams(location.search);const room=params.get("room")||"";
+  const lastHost=localStorage.getItem("ukishima_last_host");
+  const hasLocal=!!localStorage.getItem("ukishima_local");
+  let lastGuest=null;try{lastGuest=JSON.parse(localStorage.getItem("ukishima_last_guest")||"null")}catch(e){}
+  $("#app").innerHTML=`
+  <h1>浮遊島×空賊 テスト版</h1>
+  <div class="sub">${esc(VERSION)}</div>
+  <div class="panel">
+    <h2 style="margin-top:0">部屋に参加する</h2>
+    <div class="row"><input id="jname" placeholder="名前" maxlength="12" class="grow" value="${esc(lastGuest?.name||"")}">
+    <input id="jcode" placeholder="部屋番号" maxlength="5" style="width:110px;text-transform:uppercase" value="${esc(room)}"></div>
+    <div class="row" style="margin-top:8px"><button class="primary" id="bjoin">参加する</button>
+    ${lastGuest?`<span class="sub">前回：${esc(lastGuest.code)}</span>`:""}</div>
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0">部屋を作る</h2>
+    <div class="sub">作った人の画面がゲームの親になります。<b>遊んでいる間はこの画面を閉じないでください。</b></div>
+    <div class="row" style="margin-top:8px"><input id="hname" placeholder="名前" maxlength="12" class="grow"><button class="primary" id="bhost">部屋を作る</button></div>
+    ${lastHost&&localStorage.getItem("ukishima_host_"+lastHost)?`<div class="row" style="margin-top:8px"><button id="bresume">前回の部屋（${esc(lastHost)}）を再開</button></div>`:""}
+  </div>
+  <div class="panel">
+    <h2 style="margin-top:0">1台で遊ぶ（ルール確認用）</h2>
+    <div class="sub">通信なしで、1つの画面で全員を切り替えながら操作します。</div>
+    <div class="row" style="margin-top:8px"><select id="lnum">${[2,3,4,5,6].map(n=>`<option ${n===3?"selected":""}>${n}</option>`).join("")}</select><span>人</span>
+    <button class="primary" id="blocal">始める</button>${hasLocal?`<button id="blocalres">続きから</button>`:""}</div>
+  </div>`;
+  $("#bjoin").onclick=()=>{const n=$("#jname").value.trim(),c=$("#jcode").value.trim().toUpperCase();if(!n||c.length!==5){toast("名前と5文字の部屋番号を入れてください");return}guestJoin(c,n)};
+  $("#bhost").onclick=()=>{const n=$("#hname").value.trim();if(!n){toast("名前を入れてください");return}hostCreate(n)};
+  if($("#bresume"))$("#bresume").onclick=()=>hostCreate(null,lastHost);
+  $("#blocal").onclick=()=>{const n=+$("#lnum").value;localStart(Array.from({length:n},(_,i)=>"P"+(i+1)))};
+  if($("#blocalres"))$("#blocalres").onclick=()=>{S.mode="local";S.code="LOCAL";S.game=JSON.parse(localStorage.getItem("ukishima_local"));S.seat="P1";broadcast()};
+}
+
+function render(){
+  const v=S.view;if(!v){renderTitle();return}
+  const app=$("#app");
+  let h=`<div class="row"><h1 class="grow">浮遊島×空賊</h1><span class="sub">${S.mode==="local"?"1台モード":"部屋 "+esc(S.code)}</span></div>`;
+  if(S.mode==="local"){
+    h+=`<div class="tabs">${S.game.players.map(p=>`<button class="${p.id===S.seat?"on primary":""}" data-seat="${p.id}">${esc(p.name)}${p.ts.ended||(S.game.phase==="setup"&&p.setupDone)||(S.game.phase==="inspect"&&p.inspectDone)?" ✓":""}</button>`).join("")}</div>`;
+  }
+  if(S.lost)h+=`<div class="panel" style="border-color:var(--warn)">接続が切れました。<button class="primary" id="brecon">再接続</button></div>`;
+  if(v.phase==="lobby")h+=renderLobby(v);
+  else if(v.phase==="setup")h+=renderSetup(v);
+  else if(v.phase==="turn")h+=renderTurn(v);
+  else if(v.phase==="inspect")h+=renderInspect(v);
+  else if(v.phase==="result")h+=renderResult(v);
+  app.innerHTML=h;
+  bind();
+}
+function renderLobby(v){
+  const url=location.origin+location.pathname+"?room="+S.code;
+  let h=`<div class="panel"><h2 style="margin-top:0">参加者を待っています</h2>`;
+  if(S.mode==="host")h+=`<div>部屋番号 <b style="font-size:22px;letter-spacing:2px">${esc(S.code)}</b></div>
+    <div class="sub">友達にはこのリンクを送ってください</div><div class="row"><input readonly value="${esc(url)}" class="grow" id="shareurl"><button id="bcopy">コピー</button></div>`;
+  h+=`<ul>${v.lobby.map(p=>`<li>${esc(p.name)}${p.id===S.seat?"（あなた）":""}${p.connected?"":" <span class='pill'>切断中</span>"}</li>`).join("")}</ul>`;
+  if(S.mode==="host")h+=`<button class="primary" id="bstart" ${v.lobby.length<2?"disabled":""}>この${v.lobby.length}人で始める</button><div class="sub">2〜6人で始められます</div>`;
+  else h+=`<div class="sub">部屋を作った人が開始するまでお待ちください。</div>`;
+  return h+`</div>`;
+}
+function myLm(me){return LM[me.landmarkId]}
+function renderSetup(v){
+  const me=v.me;
+  let h=`<div class="panel"><b>準備</b>：あなたのランドマークは <b>${esc(myLm(me).name)}</b>（${esc(myLm(me).eff)}）</div>`;
+  if(!me.setupDone)h+=`<div class="hint">キングを置くマスを選んでください（<b>7列目か8列目</b>）。生産施設3つと売却所は自動で配置されます。</div>`;
+  else h+=`<div class="hint">配置しました。他のプレイヤーを待っています：${v.others.map(o=>esc(o.name)+(o.setupDone?" ✓":" …")).join("／")}</div>`;
+  h+=boardHTML(me,{setup:!me.setupDone});
+  h+=statsHTML(me)+logHTML(me);
+  return h;
+}
+function statsHTML(me){
+  return `<div class="panel"><div class="row"><div class="grow"><b>${yen(me.money)}</b></div><span class="sub">資材上限 各${me.cap}個</span></div>
+  <div class="stat" style="margin-top:6px">${RES.map(r=>`<div>${RES_JA[r]}<br><b>${me.res[r]}</b></div>`).join("")}</div></div>`;
+}
+function logHTML(me){return `<div class="panel"><b>記録</b><div class="log">${me.log.map(l=>`<div>${esc(l)}</div>`).join("")}</div></div>`}
+function bLabel(b,turn){
+  if(b.kind==="fac"){const lv=b.opened?"Lv"+facLevel(b,turn):"未";return `<div class="b ${b.fac} ${b.opened?"":"closed"}">${FAC[b.fac].short}<small>${lv}</small></div>`}
+  if(b.kind==="market")return `<div class="b market ${b.opened?"":"closed"}">売却<small>${b.opened?"":"未"}</small></div>`;
+  if(b.kind==="base")return `<div class="b base">基地<small>Lv${b.level}</small></div>`;
+  if(b.kind==="warehouse")return `<div class="b warehouse">倉庫</div>`;
+  if(b.kind==="landmark")return `<div class="b landmark">LM<small>${esc(LM[b.lm].name.slice(0,2))}</small></div>`;
+  return "";
+}
+function boardHTML(p,opt={}){
+  const turn=S.view.turn;const targets=opt.targets||new Set();
+  let h=`<div class="board"><div></div>${[...COLS].map(c=>`<div class="lab">${c}</div>`).join("")}`;
+  for(let r=0;r<8;r++){
+    h+=`<div class="lab">${r+1}</div>`;
+    for(let c=0;c<8;c++){
+      const i=idx(r,c),b=p.grid[i];const enemy=p.owner&&p.owner[i]!==p.id;
+      const isK=p.king&&p.king.r===r&&p.king.c===c;
+      const cls=["cell"];if(enemy)cls.push("enemy");if(targets.has(i)||(opt.setup&&r>=6))cls.push("target");
+      h+=`<button class="${cls.join(" ")}" ${opt.readonly?'tabindex="-1" data-ro="1"':""} data-r="${r}" data-c="${c}" aria-label="${sq(r,c)}">${b?bLabel(b,turn):""}${isK?`<span class="k">👑</span>`:""}</button>`;
+    }
+  }
+  return h+`</div><div class="sub" style="text-align:center">上が1列目（前）／下が8列目（後ろ）</div>`;
+}
+function validTargets(me){
+  const t=new Set();const m=S.ui.mode;
+  if(m==="move"){for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const r=me.king.r+dr,c=me.king.c+dc;if(r>=0&&r<8&&c>=0&&c<8&&me.owner[idx(r,c)]===me.id)t.add(idx(r,c))}}
+  if(m==="build"){for(let i=0;i<64;i++){const r=Math.floor(i/8),c=i%8;if(!me.grid[i]&&me.owner[i]===me.id&&!(me.king.r===r&&me.king.c===c))t.add(i)}}
+  return t;
+}
+function renderTurn(v){
+  const me=v.me;const t=v.turn;const ts=me.ts;
+  const phaseName=t<=INSPECT_AFTER?"前半（労働・建設）":"後半（侵略は第2段階で追加）";
+  let h=`<div class="panel"><div class="row"><b class="grow">ターン ${t} / ${TOTAL_TURNS}</b><span class="pill">${phaseName}</span></div>
+  <div class="sub">あなたのランドマーク：<b>${esc(myLm(me).name)}</b>（${esc(myLm(me).cond==="なし"?"条件なし":"条件："+myLm(me).cond)}）</div>
+  <div class="sub">他のプレイヤー：${v.others.map(o=>esc(o.name)+(o.ended?" ✓":" …")+(o.connected?"":"（切断中）")).join("／")||"なし"}</div></div>`;
+  h+=statsHTML(me);
+  if(t>INSPECT_AFTER)h+=`<div class="tabs"><button data-tab="me" class="${S.ui.tab==="me"?"on primary":""}">自分の島</button>${v.others.map(o=>`<button data-tab="${o.id}" class="${S.ui.tab===o.id?"on primary":""}">${esc(o.name)}の島</button>`).join("")}</div>`;
+  if(S.ui.tab!=="me"&&t>INSPECT_AFTER){const o=v.others.find(x=>x.id===S.ui.tab);if(o&&o.board){h+=boardHTML({...o.board,id:o.id},{readonly:true});h+=`<div class="sub" style="text-align:center">ランドマーク：${esc(LM[o.board.landmarkId].name)}</div>`;return h+logHTML(me)}}
+  // 状態の説明
+  let hint="";
+  if(ts.ended)hint="このターンは終了しました。他のプレイヤーを待っています。";
+  else if(S.ui.mode==="move")hint="キングの移動先をタップ（周囲8マス）。";
+  else if(S.ui.mode==="build")hint=`<b>${esc(buildName(S.ui.build,me))}</b> を建てるマスをタップ。`;
+  else if(!ts.action)hint=`${ts.moved?"":"① キングを動かす（任意）→ "}② 労働 か 建設 を選ぶ → ③ ターン終了`;
+  else if(ts.action==="labor")hint="労働しました。売却はまだできます。終わったら「ターン終了」。";
+  else hint="建設中です。何個でも建てられます。終わったら「ターン終了」。";
+  h+=`<div class="hint">${hint}</div>`;
+  h+=boardHTML(me,{targets:validTargets(me)});
+  if(!ts.ended){
+    h+=`<div class="panel"><div class="row">
+      <button id="bmove" class="${S.ui.mode==="move"?"on":""}" ${ts.moved||ts.action?"disabled":""}>👑 キング移動${ts.moved?"済":""}</button>
+      <button id="blabor" ${ts.action?"disabled":""}>⚒ 労働（${yen(me.supply)}×ルーレット）</button>
+      <button id="bbuildm" ${ts.action==="labor"?"disabled":""}>🏗 建設</button>
+      <button id="bsell">💰 売却</button>
+      <button id="bundo" ${me.undoCount?"":"disabled"}>↶ 取り消し</button>
+      ${S.ui.mode?`<button id="bcancel">やめる</button>`:""}
+    </div><div class="row" style="margin-top:8px"><button class="primary grow" id="bend">ターン終了${ts.action?"":"（何もしない）"}</button></div></div>`;
+  }else h+=`<div class="panel"><button id="bunend">終了を取り消す</button></div>`;
+  h+=logHTML(me);
+  return h;
+}
+function buildName(w,me){if(w==="landmark")return LM[me.landmarkId].name;return BUILD[w].name}
+function renderInspect(v){
+  const me=v.me;
+  let h=`<div class="panel"><b>視察フェーズ</b>（10ターン終了後）<div class="sub">他のプレイヤーの島が見えるようになりました。確認したら「視察終了」を押してください。全員が押すと11ターン目が始まります。</div>
+  <div class="sub">${v.others.map(o=>esc(o.name)+(o.inspectDone?" ✓":" …")).join("／")}</div></div>`;
+  h+=`<div class="tabs"><button data-tab="me" class="${S.ui.tab==="me"?"on primary":""}">自分の島</button>${v.others.map(o=>`<button data-tab="${o.id}" class="${S.ui.tab===o.id?"on primary":""}">${esc(o.name)}の島</button>`).join("")}</div>`;
+  if(S.ui.tab==="me")h+=boardHTML(me,{readonly:true});
+  else{const o=v.others.find(x=>x.id===S.ui.tab);if(o&&o.board){h+=boardHTML({...o.board,id:o.id},{readonly:true});h+=`<div class="sub" style="text-align:center">ランドマーク：${esc(LM[o.board.landmarkId].name)}</div>`}}
+  h+=`<div class="panel">${me.inspectDone?"視察終了済み。他の人を待っています。":`<button class="primary" id="binsp">視察終了</button>`}</div>`;
+  return h;
+}
+function renderResult(v){
+  const rows=[{name:v.me.name+"（あなた）",s:v.me.score,m:v.me.money},...v.others.map(o=>({name:o.name,s:o.score,m:o.money}))].sort((a,b)=>b.s.total-a.s.total);
+  let h=`<div class="panel"><h2 style="margin-top:0">ラウンド終了</h2><table><tr><th>順位</th><th>名前</th><th class="n">領土</th><th class="n">建設物</th><th class="n">所持金</th><th class="n">合計</th></tr>
+  ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td><td class="n">${r.s.territory}</td><td class="n">${r.s.buildings}</td><td class="n">${r.s.money}</td><td class="n"><b>${r.s.total}</b></td></tr>`).join("")}</table>
+  <div class="sub">第1段階のため、旗・破壊・瀕死・同盟は0点です。</div></div>`;
+  if(S.mode!=="guest")h+=`<div class="panel"><button id="bexport">記録をダウンロード（JSON）</button></div>`;
+  h+=boardHTML(v.me,{readonly:true})+logHTML(v.me);
+  return h;
+}
+function openBuildMenu(){
+  const me=S.view.me;const d=$("#dlg");
+  const items=[...Object.keys(BUILD),"landmark"].map(w=>{
+    const cost=w==="landmark"?{money:LM[me.landmarkId].money,res:LM[me.landmarkId].res}:BUILD[w];
+    let ok=canAfford(me,cost),why=ok?"":"足りない："+lackText(me,cost);
+    if(w==="landmark"){const lm=LM[me.landmarkId];if(me.grid.some(b=>b&&b.kind==="landmark")){ok=false;why="建設済み"}else if(!lm.ok(me)){ok=false;why="条件："+lm.cond}}
+    return `<button data-w="${w}" ${ok?"":"disabled"}><span>${esc(buildName(w,me))}</span><span class="c">${yen(cost.money)}＋${resText(cost.res)}${why?"<br>"+esc(why):""}</span></button>`;
+  }).join("");
+  const bases=me.grid.map((b,i)=>b&&b.kind==="base"&&b.level<3?{b,i}:null).filter(Boolean);
+  const ups=bases.map(({b,i})=>{const cost=BASE_UP[b.level+1];const ok=canAfford(me,cost);const r=Math.floor(i/8),c=i%8;
+    return `<button data-up="${r},${c}" ${ok?"":"disabled"}><span>空賊基地(${sq(r,c)}) Lv${b.level}→${b.level+1}</span><span class="c">${yen(cost.money)}＋${resText(cost.res)}${ok?"":"<br>足りない："+esc(lackText(me,cost))}</span></button>`}).join("");
+  d.innerHTML=`<b>建設</b><div class="menu">${items}${ups?"<div class='sub' style='margin-top:8px'>空賊基地のレベルアップ</div>"+ups:""}</div><div class="row" style="margin-top:8px"><button id="dclose">閉じる</button></div>`;
+  d.showModal();
+  d.querySelectorAll("[data-w]").forEach(b=>b.onclick=()=>{S.ui.mode="build";S.ui.build=b.dataset.w;d.close();render()});
+  d.querySelectorAll("[data-up]").forEach(b=>b.onclick=()=>{const [r,c]=b.dataset.up.split(",").map(Number);d.close();doAct({kind:"upgrade",r,c})});
+  $("#dclose").onclick=()=>d.close();
+}
+function openSell(){
+  const me=S.view.me;const d=$("#dlg");
+  const m=me.grid.find(b=>b&&b.kind==="market");
+  const avail=m&&m.opened&&m.openedTurn<S.view.turn;
+  d.innerHTML=`<b>資材を売る</b><div class="sub">1個50マリー／1ターン10個まで・2種類まで（今ターン：${me.ts.sold}個${me.ts.soldTypes.length?"・"+me.ts.soldTypes.map(r=>RES_JA[r]).join("、"):""}）</div>
+  ${avail?`<div class="row" style="margin-top:8px"><select id="sres">${RES.map(r=>`<option value="${r}">${RES_FULL[r]}（${me.res[r]}個）</option>`).join("")}</select>
+  <input id="sn" type="number" min="1" max="10" value="${Math.max(1,Math.min(10-me.ts.sold,5))}" style="width:80px"><button class="primary" id="sgo">売る</button></div>`
+  :`<div class="hint">${m&&m.opened?"売却所は開放した1ターン後から使えます。":"売却所がまだ開放されていません。キングを売却所のマスに止めると開放されます。"}</div>`}
+  <div class="row" style="margin-top:8px"><button id="dclose">閉じる</button></div>`;
+  d.showModal();
+  if($("#sgo"))$("#sgo").onclick=()=>{doAct({kind:"sell",res:$("#sres").value,n:+$("#sn").value});d.close()};
+  $("#dclose").onclick=()=>d.close();
+}
+function exportLog(){
+  const blob=new Blob([JSON.stringify(S.game,null,1)],{type:"application/json"});
+  const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=`ukishima_${new Date().toISOString().slice(0,10)}.json`;a.click();
+}
+function bind(){
+  const on=(id,f)=>{const e=document.getElementById(id);if(e)e.onclick=f};
+  document.querySelectorAll("[data-seat]").forEach(b=>b.onclick=()=>{S.seat=b.dataset.seat;S.ui={mode:null,build:null,tab:"me"};S.view=viewFor(S.game,S.seat);render()});
+  document.querySelectorAll("[data-tab]").forEach(b=>b.onclick=()=>{S.ui.tab=b.dataset.tab;render()});
+  on("brecon",()=>S.reconnect&&S.reconnect());
+  on("bcopy",()=>{navigator.clipboard?.writeText($("#shareurl").value);toast("コピーしました")});
+  on("bstart",()=>{startSetup(S.game);broadcast()});
+  on("bmove",()=>{S.ui.mode=S.ui.mode==="move"?null:"move";render()});
+  on("blabor",()=>{S.ui.mode=null;doAct({kind:"labor"})});
+  on("bbuildm",()=>openBuildMenu());
+  on("bsell",()=>openSell());
+  on("bundo",()=>doAct({kind:"undo"}));
+  on("bcancel",()=>{S.ui.mode=null;render()});
+  on("bend",()=>{S.ui.mode=null;doAct({kind:"endTurn"})});
+  on("bunend",()=>doAct({kind:"unend"}));
+  on("binsp",()=>doAct({kind:"inspectDone"}));
+  on("bexport",exportLog);
+  document.querySelectorAll(".cell:not([data-ro])").forEach(el=>el.onclick=()=>{
+    const r=+el.dataset.r,c=+el.dataset.c;const v=S.view;
+    if(v.phase==="setup"){doAct({kind:"placeKing",r,c});return}
+    if(v.phase!=="turn")return;
+    if(S.ui.mode==="move"){S.ui.mode=null;doAct({kind:"move",r,c});return}
+    if(S.ui.mode==="build"){const w=S.ui.build;S.ui.mode=null;doAct({kind:"build",what:w,r,c});return}
+    const b=v.me.grid[idx(r,c)];
+    if(b&&b.kind==="base"&&b.level<3&&!v.me.ts.ended)openBuildMenu();
+  });
+}
+/* 起動 */
+render();
+if(new URLSearchParams(location.search).get("room")){setTimeout(()=>{const n=$("#jname");if(n&&!n.value)n.focus()},0)}
+window.__S=S; // テスト用
+</script>
+</body>
+</html>
