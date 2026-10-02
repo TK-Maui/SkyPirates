@@ -57,12 +57,19 @@ td.n,th.n{text-align:right}
 .menu button{width:100%;text-align:left;margin:3px 0;display:flex;justify-content:space-between;gap:8px}
 .menu button span.c{color:var(--sub);font-size:12px}
 .log{max-height:180px;overflow:auto;font-size:12px;color:var(--sub)}
-.hero{position:relative;margin:-12px -16px 12px;overflow:hidden;background:#3b6fa8}
-.hero img{display:block;width:100%;aspect-ratio:16/9;object-fit:cover}
-.hero .ttl{position:absolute;left:0;right:0;bottom:0;padding:40px 16px 12px;background:linear-gradient(transparent,rgba(8,14,24,.82));color:#fff}
-.hero h1{margin:0;font-size:clamp(26px,6vw,40px);letter-spacing:.04em;text-shadow:0 2px 8px rgba(0,0,0,.6)}
-.hero .ver{font-size:12px;opacity:.85}
-.hero.noimg img{display:none}.hero.noimg .ttl{position:static;padding:12px 16px}
+/* タイトル画面：イラストを全面の背景にして、その上にパネルを重ねる */
+.tbg{display:none}
+body.titlebg .tbg{display:block;position:fixed;inset:0;z-index:-1;background:#2c5a8c}
+body.titlebg .tbg img{width:100%;height:100%;object-fit:cover;object-position:center 35%;display:block}
+body.titlebg .tbg::after{content:"";position:absolute;inset:0;background:linear-gradient(rgba(6,12,22,.15),rgba(6,12,22,.35) 40%,rgba(6,12,22,.6))}
+body.titlebg #app{position:relative;z-index:1}
+body.titlebg .ttl{color:#fff;padding:min(22vh,180px) 0 8px;text-shadow:0 2px 10px rgba(0,0,0,.7)}
+body.titlebg .ttl h1{margin:0;font-size:clamp(32px,8vw,56px);letter-spacing:.05em}
+body.titlebg .ttl .ver{font-size:12px;opacity:.9}
+body.titlebg .panel{background:color-mix(in srgb,var(--panel) 82%,transparent);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);box-shadow:0 6px 24px rgba(0,0,0,.25)}
+body.titlebg.noimg .tbg{display:none}
+body.titlebg.noimg .ttl{color:var(--ink);padding-top:8px;text-shadow:none}
+.ttl{display:none}body.titlebg .ttl{display:block}
 .toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;max-width:90vw;z-index:10;font-size:14px}
 .pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;background:var(--bg);border:1px solid var(--line)}
 .pill.ok{color:var(--ok);border-color:var(--ok)}
@@ -111,7 +118,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v0.8.4（2026/10/2版：タイトル画像（PNG）・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v0.8.5（2026/10/2版：タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -1052,14 +1059,15 @@ function renderMsg(m,isErr){
   $("#app").innerHTML=`<h1>SkyPirates テスト版</h1><div class="panel">${esc(m)}</div>${isErr?`<button onclick="location.href=location.pathname">タイトルに戻る</button>`:""}`;
 }
 function renderTitle(){
+  document.body.classList.add("titlebg");
   const params=new URLSearchParams(location.search);const room=params.get("room")||"";
   const lastHost=localStorage.getItem("ukishima_last_host");
   const okv=k=>{try{return JSON.parse(localStorage.getItem(k)||"null")?.v===5}catch(e){return false}};
   const hasLocal=okv("ukishima_local");
   let lastGuest=null;try{lastGuest=JSON.parse(localStorage.getItem("ukishima_last_guest")||"null")}catch(e){}
   $("#app").innerHTML=`
-  <div class="hero" id="hero"><img src="title.png" alt="浮遊島と空賊、竜騎士が飛ぶSkyPiratesのイメージイラスト" onerror="if(!this.dataset.alt){this.dataset.alt=1;this.src='title.jpg'}else this.parentNode.classList.add('noimg')">
-    <div class="ttl"><h1>SkyPirates</h1><div class="ver">テスト版 ${esc(VERSION)}</div></div></div>
+  <div class="tbg" aria-hidden="true"><img src="title.png" alt="" onerror="if(!this.dataset.alt){this.dataset.alt=1;this.src='title.jpg'}else document.body.classList.add('noimg')"></div>
+  <div class="ttl"><h1>SkyPirates</h1><div class="ver">テスト版 ${esc(VERSION)}</div></div>
   <div class="panel">
     <h2 style="margin-top:0">部屋に参加する</h2>
     <div class="row"><input id="jname" placeholder="名前" maxlength="12" class="grow" value="${esc(lastGuest?.name||"")}">
@@ -1088,6 +1096,7 @@ function renderTitle(){
 
 function render(){
   const v=S.view;if(!v){renderTitle();return}
+  document.body.classList.remove("titlebg");
   const app=$("#app");
   let h=`<div class="row"><h1 class="grow">SkyPirates</h1>${v.phase!=="lobby"?`<button id="bcost">📖 コスト表</button><button id="bscore" ${v.scores?"":"disabled title='視察フェーズから見られます'"}>🏆 得点${v.scores?"":"🔒"}</button>`:""}<span class="sub">${S.mode==="local"?"1台モード":"部屋 "+esc(S.code)}</span></div>`;
   if(S.mode==="local"){
