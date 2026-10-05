@@ -93,6 +93,7 @@ dialog{border:1px solid var(--line);border-radius:12px;background:var(--panel);c
 dialog{max-height:90vh}
 .cell .fl{position:absolute;left:1px;bottom:1px;font-size:9px;line-height:1;border-radius:3px;padding:1px}
 .cell .dm{position:absolute;left:1px;top:1px;font-size:9px;background:var(--warn);color:#fff;border-radius:3px;padding:0 2px;line-height:1.3}
+.cell .rb{position:absolute;left:50%;top:0;transform:translateX(-50%);font-size:8px;line-height:1.2;font-weight:600;color:var(--ink);opacity:.45;pointer-events:none}
 .cell .mk{position:absolute;right:1px;bottom:1px;font-size:10px;background:var(--ink);color:var(--bg);border-radius:3px;padding:0 2px;line-height:1.3}
 .cell .k small{font-size:9px;color:var(--warn);font-weight:700}
 .cell.inrange{outline:3px solid #f59e0b;outline-offset:-3px}
@@ -118,7 +119,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v0.8.5（2026/10/2版：タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v0.9.0（2026/10/4版：建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -230,6 +231,10 @@ function usableByBase(p,t){const n={};for(const c of p.chars)if(c.type!=="ryuou"
 function maxUnits(p){return hasLM(p,"noroshi")?7:6}
 function inB(r,c){return r>=0&&r<8&&c>=0&&c<8}
 /* 攻撃範囲（前・斜め前・左右の5マス）。f=+1は侵略（前＝8列目方向）、f=-1は奪還 */
+/* 1列目に建てられるのはA・B・G・Hの4マスだけ（C〜Fには建てられない） */
+/* マスの位置ボーナス（外側からの距離） */
+function ringOf(i){const r=Math.floor(i/8),c=i%8;return Math.min(r,7-r,c,7-c)}
+function noBuildSq(r,c){return r===0&&c>=2&&c<=5}
 function rangeOf(r,c,f){return [[r+f,c-1],[r+f,c],[r+f,c+1],[r,c-1],[r,c+1]].filter(([a,b])=>inB(a,b)).map(([a,b])=>idx(a,b))}
 function kingAt(p,i){return p.king&&idx(p.king.r,p.king.c)===i}
 /* 侵略時の天翔使いが選べないマス：建っている建物（未開放を含む・壊された跡地は除く）とキングのいるマス */
@@ -335,7 +340,7 @@ function proxyAct(g,pid){
   if(g.phase==="inspect"){note("視察終了");return applyAction(g,pid,{kind:"inspectDone"})}
   if(g.sub==="ally"){const A=g.ally;note("同盟フェーズ");if(A.step==="mutual")return allyAction(g,p,{kind:"allyAnswer",yes:false});const c=allyCands(g,pid);return allyAction(g,p,{kind:"allyPick",target:c[0]})}
   if(g.sub==="prep"){const ts=p.ts;
-    if(ts.stage==="move")applyAction(g,pid,{kind:"stay"});
+    if(ts.stage==="move")applyAction(g,pid,kingAutoAction(p));
     if(ts.stage==="gen")applyAction(g,pid,{kind:"genNext"});
     const act=p.sealedTurn===g.turn?"build":"labor";note(ACT_JA[act]+"を選択");return applyAction(g,pid,{kind:"choose",action:act})}
   if(g.sub==="invade"){
@@ -437,7 +442,14 @@ function startTurn(g,t){
   logG(g,`ターン${t}開始`);
   if(g.rounds===2&&g.round===2&&t===INSPECT_AFTER+1)startAllyPhase(g);
 }
-function snap(p){p.undo.push(JSON.stringify({money:p.money,res:p.res,grid:p.grid,king:p.king,ts:p.ts,stats:p.stats,chars:p.chars,charSeq:p.charSeq,marketLost:p.marketLost}))}
+function snap(p){p.undo.push(JSON.stringify({money:p.money,res:p.res,grid:p.grid,king:p.king,kingFrom:p.kingFrom||null,ts:p.ts,stats:p.stats,chars:p.chars,charSeq:p.charSeq,marketLost:p.marketLost}))}
+/* キングが動けるマス：周囲8マスの自分の領土。ただし直前のターンにいたマス（1つ前の移動の元のマス）には戻れない */
+function kingMoves(p){const o=[];const f=p.kingFrom;
+  for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const r=p.king.r+dr,c=p.king.c+dc;
+    if(!inB(r,c)||p.owner[idx(r,c)]!==p.id)continue;if(f&&f.r===r&&f.c===c)continue;o.push(idx(r,c))}
+  return o}
+function kingAutoAction(p){const m=kingMoves(p);return m.length?{kind:"move",r:Math.floor(m[0]/8),c:m[0]%8}:{kind:"stay"}}
+const KING_BONUS=300;
 function afterMoveStage(p){return bases(p).some(({b})=>alive(b))?"gen":"choose"}
 function actionBlocked(g,p,act){
   const sealed=p&&p.sealedTurn===g.turn;
@@ -453,6 +465,14 @@ function actionBlocked(g,p,act){
   return null;
 }
 /* ---------- 操作の受付 ---------- */
+/* 処理中に想定外のエラーが起きても止まらないよう、元の状態に戻してエラーを返す */
+function safeApply(g,pid,a,fn){
+  const backup=JSON.stringify(g);
+  try{return fn?fn():applyAction(g,pid,a)}
+  catch(e){const b=JSON.parse(backup);for(const k of Object.keys(g))delete g[k];Object.assign(g,b);
+    console.error(e);(g.errors=g.errors||[]).push({at:Date.now(),turn:g.turn,sub:g.sub,pid,a,msg:String(e&&e.message),stack:String(e&&e.stack).slice(0,600)});
+    return "内部エラーが起きたので、この操作は取り消しました（部屋を作った人の「全データをダウンロード」で原因を調べられます）："+(e&&e.message)}
+}
 function applyAction(g,pid,a){
   const p=P_OF(g,pid);if(!p)return "プレイヤーが見つかりません";
   switch(a.kind){
@@ -475,8 +495,9 @@ function applyAction(g,pid,a){
       const n=a.n|0;if(n<1)return "個数を入れてください";
       if(!RES.includes(a.res))return "資材を選んでください";
       if(p.res[a.res]<n)return "その資材が足りません";
-      if(ts.sold+n>10)return `1ターンに売れるのは10個までです（あと${10-ts.sold}個）`;
-      const types=new Set(ts.soldTypes);types.add(a.res);if(types.size>2)return "1ターンに売れる資材は2種類までです";
+      const capN=ts.sellCap||10,capT=ts.sellTypes||2;
+      if(ts.sold+n>capN)return `このターンに売れるのは${capN}個までです（あと${capN-ts.sold}個）`;
+      const types=new Set(ts.soldTypes);types.add(a.res);if(types.size>capT)return `このターンに売れる資材は${capT}種類までです`;
       snap(p);p.res[a.res]-=n;p.money+=50*n;ts.sold+=n;ts.soldTypes=[...types];p.stats.sold+=n;
       logP(g,p,`${RES_FULL[a.res]}を${n}個売却（+${yen(50*n)}）`);return null;
     }
@@ -496,7 +517,7 @@ function applyAction(g,pid,a){
     case "undo":{
       if(!p.undo.length)return "取り消せる操作がありません";
       const s=JSON.parse(p.undo.pop());
-      Object.assign(p,{money:s.money,res:s.res,grid:s.grid,king:s.king,ts:s.ts,stats:s.stats,chars:s.chars,charSeq:s.charSeq,marketLost:s.marketLost});
+      Object.assign(p,{money:s.money,res:s.res,grid:s.grid,king:s.king,kingFrom:s.kingFrom,ts:s.ts,stats:s.stats,chars:s.chars,charSeq:s.charSeq,marketLost:s.marketLost});
       logP(g,p,"直前の操作を取り消し");return null;
     }
   }
@@ -505,13 +526,21 @@ function applyAction(g,pid,a){
     switch(a.kind){
       case "move":case "stay":{
         if(ts.stage!=="move")return "キングの移動はもう済んでいます（「取り消し」で戻せます）";
-        if(a.kind==="stay"){snap(p);ts.stage=afterMoveStage(p);logP(g,p,"キングは動かない");return null}
+        if(a.kind==="stay"){
+          if(kingMoves(p).length)return "キングは必ず動かします（「動かない」は、周りが敵の領土でふさがれて動けないときだけ選べます）";
+          snap(p);p.kingFrom=null;ts.stage=afterMoveStage(p);logP(g,p,"キングは動けないため、動かない");return null}
         const {r,c}=a;const dr=Math.abs(r-p.king.r),dc=Math.abs(c-p.king.c);
         if(!inB(r,c)||Math.max(dr,dc)!==1)return "キングは周囲8マスのどれかに1マスだけ動けます";
         if(p.owner[idx(r,c)]!==p.id)return "敵に取られたマスには移動できません";
-        snap(p);p.king={r,c};
+        if(p.kingFrom&&p.kingFrom.r===r&&p.kingFrom.c===c)return "直前のターンにいたマスには戻れません";
+        snap(p);p.kingFrom={r:p.king.r,c:p.king.c};p.king={r,c};
         const b=p.grid[idx(r,c)];let msg=`キングを${sq(r,c)}へ移動`;
         if(b&&(b.kind==="fac"||b.kind==="market")&&!b.opened){b.opened=true;b.openedTurn=g.turn;if(b.kind==="fac"&&p.boosted)b.ally=true;msg+=`、${bName(b)}を開放（1ターン後から${b.kind==="fac"?"支給":"売却可能"}）`}
+        else if(b&&!b.destroyed){
+          // キングが建物に止まったときのボーナス
+          if(b.kind==="market"){if(b.openedTurn<g.turn){ts.sellCap=20;ts.sellTypes=3;msg+=`。売却所に止まったので、このターンは資材を3種類・20個まで売れる`}}
+          else{p.money+=KING_BONUS;p.stats.kingMoney=(p.stats.kingMoney||0)+KING_BONUS;msg+=`。${bName(b)}に止まったので+${yen(KING_BONUS)}`}
+        }
         ts.stage=afterMoveStage(p);logP(g,p,msg);return null;
       }
       case "gen":{
@@ -621,6 +650,7 @@ function applyAction(g,pid,a){
         if(p.grid[i])return "そこには建物があります";
         if(p.king.r===r&&p.king.c===c)return "キングのいるマスには建てられません";
         if(p.owner[i]!==p.id||p.flags[i])return "自分の領土にしか建てられません";
+        if(noBuildSq(r,c))return "1列目に建てられるのはA・B・G・Hの4マスだけです";
         let cost,b,label;
         if(what==="market"){
           if(!p.marketLost||p.grid.some(x=>x&&x.kind==="market"))return "売却所は1島に1つです（壊されたときだけ建て直せます）";
@@ -767,8 +797,13 @@ function buildInvQueue(g){
   const q={};g.players.filter(p=>p.ts.action==="invade"&&!p.ts.skipped).forEach(p=>{(q[p.ts.target]=q[p.ts.target]||[]).push(p)});
   g.invQ={};
   for(const [tid,list] of Object.entries(q)){
-    list.sort((a,b)=>attackPower(b)-attackPower(a)||scoreNow[a.id]-scoreNow[b.id]);
+    // 順番：①攻撃回数が多い ②現在の得点が低い ③所持マリーが少ない ④それでも同じなら抽選
+    const lot=Object.fromEntries(list.map(p=>[p.id,Math.random()]));
+    const cmp3=(a,b)=>attackPower(b)-attackPower(a)||scoreNow[a.id]-scoreNow[b.id]||a.money-b.money;
+    list.sort((a,b)=>cmp3(a,b)||lot[a.id]-lot[b.id]);
+    const drawn=list.some((p,k)=>k>0&&cmp3(list[k-1],p)===0);
     g.invQ[tid]=list.map(p=>p.id);
+    if(drawn)list.forEach(p=>logP(g,p,`${P_OF(g,tid).name}の島への侵略：攻撃回数・得点・所持マリーが同じ人がいたので、抽選で順番を決めました`));
     if(list.length>1)list.forEach((p,k)=>logP(g,p,`${P_OF(g,tid).name}の島を${list.length}人が侵略。あなたは${k+1}番目です`));
   }
   g.invStage="place";
@@ -888,24 +923,26 @@ function score(g,p){
   const flagPts=flags*2;
   const lm=p.grid.some(b=>b&&b.kind==="landmark"&&!b.destroyed)?1:0;
   const others=p.grid.filter(b=>b&&b.kind!=="landmark"&&b.opened!==false&&!b.destroyed).length;
-  const buildings=lm*5+others*2;
+  // マスの位置ボーナス：外側0点・1つ内側+1・2つ内側+2・中央4マス+3（建っている建物すべて。旗は対象外）
+  const posBonus=p.grid.reduce((a,b,i)=>a+(b&&b.opened!==false&&!b.destroyed?ringOf(i):0),0);
+  const buildings=lm*5+others*2+posBonus;
   const destroy=p.pts.destroyB*3+p.pts.destroyL*5+p.pts.kills*10;
   const money=Math.floor(p.money/1000);
   const ally=p.boosted?-10:0;
-  return {territory,own,away,flags,flagPts,lm,others,buildings,destroy,money,ally,total:territory+flagPts+buildings+destroy+money+ally};
+  return {territory,own,away,flags,flagPts,lm,others,posBonus,buildings,destroy,money,ally,total:territory+flagPts+buildings+destroy+money+ally};
 }
 function makeRecord(g,p){
   const s=score(g,p),st=p.stats;const n=st.seq.length||1;
   return {round:g.round,name:p.name,landmark:LM[p.landmarkId].name,lmTurn:st.lmTurn,ally:p.awakened?"覚醒":p.allyWith?"同盟("+P_OF(g,p.allyWith).name+")":"",
-    total:s.total,territory:s.territory,away:s.away,flags:s.flags,flagPts:s.flagPts,buildings:s.buildings,destroy:s.destroy,moneyPts:s.money,allyPts:s.ally,
-    labor:st.labor,build:st.build,invade:st.invade,retake:st.retake,seq:st.seq,laborMoney:st.laborMoney,moneyEnd:p.money,
+    total:s.total,territory:s.territory,away:s.away,flags:s.flags,flagPts:s.flagPts,buildings:s.buildings,posBonus:s.posBonus,destroy:s.destroy,moneyPts:s.money,allyPts:s.ally,
+    labor:st.labor,build:st.build,invade:st.invade,retake:st.retake,seq:st.seq,laborMoney:st.laborMoney,kingMoney:st.kingMoney||0,moneyEnd:p.money,
     destroyB:p.pts.destroyB,destroyL:p.pts.destroyL,kills:p.pts.kills,downed:st.downed,lostB:st.lostB,repairs:st.repairs,
     sold:st.sold,lostRes:st.lost,genT:st.gen.tenshou||0,genK:st.gen.kuzoku||0,genR:st.gen.ryukishi||0,genO:st.gen.ryuou||0,
     upH:st.up.houkou,upS:st.up.shinsou,upK:st.up.kamui,skipped:st.skipped};
 }
-const REC_COLS=[["round","ラウンド"],["name","名前"],["total","合計点"],["territory","領土点"],["away","他の島の領土(マス)"],["flags","旗(本)"],["buildings","建設物点"],["destroy","破壊・瀕死点"],["moneyPts","所持金点"],["allyPts","同盟・覚醒の減点"],
+const REC_COLS=[["round","ラウンド"],["name","名前"],["total","合計点"],["territory","領土点"],["away","他の島の領土(マス)"],["flags","旗(本)"],["buildings","建設物点"],["posBonus","うち位置ボーナス"],["destroy","破壊・瀕死点"],["moneyPts","所持金点"],["allyPts","同盟・覚醒の減点"],
   ["landmark","ランドマーク"],["lmTurn","LM建設ターン"],["ally","同盟・覚醒"],["labor","労働(回)"],["build","建設(回)"],["invade","侵略(回)"],["retake","奪還(回)"],["seq","アクション順"],
-  ["laborMoney","労働収入"],["moneyEnd","最終所持金"],["destroyB","建物破壊"],["destroyL","LM破壊"],["kills","瀕死にした"],["downed","瀕死にされた"],["lostB","壊された建物"],["repairs","修繕"],
+  ["laborMoney","労働収入"],["kingMoney","キングの建物収入"],["moneyEnd","最終所持金"],["destroyB","建物破壊"],["destroyL","LM破壊"],["kills","瀕死にした"],["downed","瀕死にされた"],["lostB","壊された建物"],["repairs","修繕"],
   ["sold","売却(個)"],["lostRes","消滅資材(個)"],["genT","天翔使い生成"],["genK","空賊生成"],["genR","竜騎士生成"],["genO","竜騎士王生成"],["upH","咆哮"],["upS","伸槍"],["upK","神威"],["skipped","代行された回数"]];
 function islandView(p){return {id:p.id,name:p.name,grid:p.grid,owner:p.owner,flags:p.flags,dmg:p.dmg,king:p.king,kingDmg:p.kingDmg,kingDownTurn:p.kingDownTurn,landmarkId:p.landmarkId,sealedTurn:p.sealedTurn,
   kings:p.chars.filter(c=>c.type==="ryuou").map(c=>({base:c.base,up:c.up})),gens:p.grid.filter(b=>b&&b.kind==="base"&&b.gen&&b.gen.type==="ryuou").map(b=>({label:b.label,up:b.gen.up,readyTurn:b.gen.readyTurn}))}}
@@ -972,10 +1009,10 @@ const peerId = code=>"ukishima-kuzoku-"+code;
 function saveHost(){try{localStorage.setItem("ukishima_host_"+S.code,JSON.stringify(S.game));localStorage.setItem("ukishima_last_host",S.code)}catch(e){}}
 function broadcast(){
   if(S.mode==="host"){
-    for(const [pid,conn] of S.conns){try{conn.open!==false&&conn.send({t:"state",view:viewFor(S.game,pid),code:S.code})}catch(e){}}
+    for(const [pid,conn] of S.conns){try{conn.open!==false&&conn.send({t:"state",view:viewFor(S.game,pid),code:S.code})}catch(e){console.error(e)}}
     saveHost();
   }
-  S.view=viewFor(S.game,S.seat);render();
+  try{S.view=viewFor(S.game,S.seat);render()}catch(e){console.error(e);toast("画面の表示でエラー："+e.message)}
 }
 async function hostCreate(name,resumeCode){
   S.mode="host";S.code=resumeCode||makeCode();
@@ -992,13 +1029,21 @@ async function hostCreate(name,resumeCode){
     else toast("通信エラー："+(e.type||e.message));
   });
   peer.on("disconnected",()=>{try{peer.reconnect()}catch(e){}});
+  // 生存確認：5秒ごとに全員へ合図を送る（止まっていないことを子の画面が確認できる）
+  clearInterval(S.hb);S.hb=setInterval(()=>{for(const [,c] of S.conns){try{c.open!==false&&c.send({t:"hb"})}catch(e){}}},5000);
+  keepAwake();
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.mode==="host"){keepAwake();try{if(S.peer&&S.peer.disconnected)S.peer.reconnect()}catch(e){}broadcast()}});
   peer.on("connection",conn=>{
     conn.on("data",msg=>hostOnData(conn,msg));
     conn.on("close",()=>{for(const [pid,c] of S.conns)if(c===conn){S.conns.delete(pid);const p=S.game.players.find(q=>q.id===pid);if(p){p.connected=false}broadcast()}});
   });
 }
+/* 部屋を作った人の画面がスリープしないようにする（対応ブラウザのみ） */
+async function keepAwake(){try{if("wakeLock" in navigator&&document.visibilityState==="visible"&&!S.wake)S.wake=await navigator.wakeLock.request("screen"),S.wake.addEventListener("release",()=>{S.wake=null})}catch(e){}}
 function hostOnData(conn,msg){
   const g=S.game;
+  if(msg.t==="hb")return;
+  if(msg.t==="sync"){let pid=null;for(const [k,c] of S.conns)if(c===conn)pid=k;if(pid)try{conn.send({t:"state",view:viewFor(g,pid),code:S.code})}catch(e){}return}
   if(msg.t==="join"){
     let p=msg.token&&g.players.find(q=>q.token===msg.token);
     if(!p){
@@ -1015,7 +1060,7 @@ function hostOnData(conn,msg){
     let pid=null;for(const [k,c] of S.conns)if(c===conn)pid=k;
     if(!pid)return;
     if(msg.a&&msg.a.kind==="nextRound"){conn.send({t:"err",msg:"2ラウンド目は部屋を作った人が始めます"});return}
-    const err=applyAction(g,pid,msg.a);
+    const err=safeApply(g,pid,msg.a);
     if(err)conn.send({t:"err",msg:err});
     broadcast();
   }
@@ -1032,15 +1077,24 @@ async function guestJoin(code,name){
     const timer=setTimeout(()=>{if(!S.view)renderMsg("部屋が見つかりません。部屋番号を確かめるか、作った人の画面が開いているか確認してください。",true)},12000);
     conn.on("open",()=>{clearTimeout(timer);conn.send({t:"join",name,token:getToken(S.code,name)})});
     conn.on("data",msg=>{
+      S.lastMsg=Date.now();if(S.stale){S.stale=false;render()}
+      if(msg.t==="hb")return;
       if(msg.t==="welcome"){S.seat=msg.pid;try{localStorage.setItem("ukishima_last_guest",JSON.stringify({code:S.code,name}))}catch(e){}}
       else if(msg.t==="state"){S.view=msg.view;render()}
       else if(msg.t==="err"){toast(msg.msg);if(!S.view)renderMsg(msg.msg,true)}
     });
-    conn.on("close",()=>{toast("接続が切れました。「再接続」を押してください");S.lost=true;render()});
+    conn.on("close",()=>{if(conn!==S.hostConn)return;toast("接続が切れました。「再接続」を押してください");S.lost=true;render()});
   };
   peer.on("open",connect);
   peer.on("error",e=>{if(e.type==="peer-unavailable")renderMsg("部屋が見つかりません。部屋番号を確かめるか、作った人の画面が開いているか確認してください。",true);else toast("通信エラー："+(e.type||e.message))});
-  S.reconnect=()=>{S.lost=false;connect()};
+  S.reconnect=()=>{S.lost=false;const old=S.hostConn;S.hostConn=null;try{old&&old.close&&old.close()}catch(e){}try{if(peer.disconnected)peer.reconnect()}catch(e){}connect()};
+  // 親からの合図が15秒届かなければ「止まっている」と表示し、自動で再接続を試す
+  S.lastMsg=Date.now();clearInterval(S.watch);
+  S.watch=setInterval(()=>{if(!S.view||S.lost)return;const gap=Date.now()-S.lastMsg;
+    if(gap>15000&&!S.stale){S.stale=true;render()}
+    if(gap>20000&&Date.now()-(S.lastTry||0)>20000){S.lastTry=Date.now();S.reconnect()}
+  },5000);
+  document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.mode==="guest"&&S.view&&Date.now()-S.lastMsg>8000)S.reconnect()});
 }
 function localStart(names,rounds){
   S.mode="local";S.code="LOCAL";S.game=newGame();S.game.rounds=rounds||1;
@@ -1049,7 +1103,7 @@ function localStart(names,rounds){
 }
 function doAct(a){
   if(S.mode==="guest"){if(!S.hostConn||S.lost){toast("接続されていません");return}S.hostConn.send({t:"act",a});return}
-  const err=applyAction(S.game,S.seat,a);if(err)toast(err);
+  const err=safeApply(S.game,S.seat,a);if(err)toast(err);
   if(S.mode==="local"){try{localStorage.setItem("ukishima_local",JSON.stringify(S.game))}catch(e){}}
   broadcast();
 }
@@ -1104,10 +1158,17 @@ function render(){
     h+=`<div class="tabs">${g.players.map(p=>`<button class="${p.id===S.seat?"on primary":""}" data-seat="${p.id}">${esc(p.name)}${doneP(p)?" ✓":""}</button>`).join("")}</div>`;
   }
   if(S.lost)h+=`<div class="panel" style="border-color:var(--warn)">接続が切れました。<button class="primary" id="brecon">再接続</button></div>`;
+  else if(S.stale)h+=`<div class="panel" style="border-color:var(--warn)"><b>部屋を作った人の画面と通信できていません。</b><div class="sub">作った人の画面が閉じている・スリープしている・別のアプリに切り替わっている可能性があります。作った人は画面を開き直してください（再読み込みした場合は、タイトル画面の「前回の部屋を再開」）。自動で再接続を試しています。</div><div class="row" style="margin-top:6px"><button class="primary" id="brecon">今すぐ再接続</button></div></div>`;
   if(S.mode==="host"&&v.pending&&v.pending.some(id=>id!==S.seat)){
     h+=`<details class="panel proxy"><summary>待っている人：${v.pending.filter(id=>id!==S.seat).map(id=>{const o=(v.lobby||[]).find(x=>x.id===id);return esc(pname(id))+(o&&!o.connected?"（切断中）":"")}).join("・")}</summary>
       <div class="sub">スマホがスリープしたなどで進まないときは、代わりに1段階進められます（アクション選択なら労働、建設フェーズなら建設を終える、侵略なら取りやめて遠征コストを返金、など）。</div>
       <div class="row" style="margin-top:6px">${v.pending.filter(id=>id!==S.seat).map(id=>`<button data-proxy="${id}">${esc(pname(id))}の代わりに進める</button>`).join("")}</div></details>`;
+  }
+  if(S.mode==="host"&&v.phase!=="lobby"&&v.phase!=="result"){
+    const errN=(S.game.errors||[]).length;
+    h+=`<details class="panel"${errN?' open style="border-color:var(--warn)"':""}><summary class="sub">部屋を作った人のメニュー${errN?`（内部エラー ${errN}件）`:""}</summary>
+      <div class="sub">この画面がゲームの親です。スリープ・別アプリへの切り替え・タブを閉じると、全員の画面が止まります。もし止まったら、この画面を開き直してください（再読み込みした場合は、タイトル画面の「前回の部屋を再開」→ 他の人は同じ名前・部屋番号で参加し直し）。</div>
+      <div class="row" style="margin-top:6px"><button id="bexport">全データをダウンロード（JSON）</button></div></details>`;
   }
   if(v.phase==="lobby")h+=renderLobby(v);
   else if(v.phase==="setup")h+=renderSetup(v);
@@ -1170,7 +1231,8 @@ function boardHTML(p,opt={}){
       const dm=p.dmg&&p.dmg[i]&&b&&!b.destroyed?`<span class="dm">${p.dmg[i]}/${durability(p,i)}</span>`:"";
       const kd=isK?`<span class="k">👑${p.kingDmg?`<small>${p.kingDmg}/7</small>`:""}</span>`:"";
       const mk=marks[i]?`<span class="mk">${esc(marks[i])}</span>`:"";
-      h+=`<button class="${cls.join(" ")}" ${st} ${opt.readonly?'tabindex="-1" data-ro="1"':""} data-r="${r}" data-c="${c}" aria-label="${sq(r,c)}">${b?bLabel(b,turn):""}${kd}${fl}${dm}${mk}</button>`;
+      const rb=ringOf(i)?`<span class="rb">+${ringOf(i)}</span>`:"";
+      h+=`<button class="${cls.join(" ")}" ${st} ${opt.readonly?'tabindex="-1" data-ro="1"':""} data-r="${r}" data-c="${c}" aria-label="${sq(r,c)}">${b?bLabel(b,turn):""}${rb}${kd}${fl}${dm}${mk}</button>`;
     }
   }
   return h+`</div><div class="sub" style="text-align:center">${opt.caption||"上が1列目（前）／下が8列目（後ろ）"}</div>`;
@@ -1222,7 +1284,9 @@ function renderTurn(v){
   const dl=destroyedList(me);
   const common=`<button id="bsell">💰 売却</button>${dl.length?`<button id="brepair">🔧 修繕</button>`:""}<button id="bundo" ${me.undoCount?"":"disabled"}>↶ 取り消し</button>`;
   if(v.sub==="prep"){
-    if(ts.stage==="move"){hint="<b>キングの移動</b>：光っているマスをタップ（周囲8マス）。動かさない場合は「動かさない」。";ctrl=`<button id="bstay">動かさない</button>${common}`}
+    if(ts.stage==="move"){const stuck=!kingMoves(me).length;
+      hint=stuck?"<b>キングの移動</b>：周りが敵の領土でふさがれていて動けません。「動かない」を押してください。":`<b>キングの移動</b>：光っているマスをタップ（周囲8マス・必ず動かす。直前のターンにいたマスには戻れない）。建物に止まると+${yen(KING_BONUS)}、売却所ならこのターンは3種類・20個まで売れる。`;
+      ctrl=`${stuck?`<button id="bstay" class="primary">動かない</button>`:""}${common}`}
     else if(ts.stage==="gen"){hint="<b>キャラ生成</b>：基地ごとに1ターン1体まで。生成しない場合は「次へ」。";ctrl=genPanel(me)+`<div class="row" style="margin-top:8px"><button class="primary" id="bgennext">次へ（アクション選択）</button>${common}</div>`}
     else if(ts.stage==="choose"){
       hint=me.sealedTurn===t?"<b>封鎖中</b>：このターンは建設だけ選べます。":"<b>アクション選択</b>：1つだけ選びます。全員が選ぶと、労働→侵略→建設→奪還の順に処理されます。";
@@ -1230,7 +1294,7 @@ function renderTurn(v){
       ctrl=`<div class="acts">${acts.map(([k,n])=>{const bl=actionBlocked({turn:t},me,k);return `<button data-act="${k}" ${bl?"disabled":""}>${n}${bl?`<small>${esc(bl)}</small>`:""}</button>`}).join("")}</div><div class="row" style="margin-top:8px">${common}</div>`;
     }else{hint=`<b>${ACT_JA[ts.action]}</b>を選びました。全員が選び終えると処理が始まります。`;ctrl=`<button id="bundecide">選び直す</button>${common}`}
   }else if(v.sub==="build"&&ts.action==="build"&&!ts.buildDone){
-    hint=S.ui.mode==="build"?`<b>${esc(buildName(S.ui.build,me))}</b> を建てるマスをタップ。`:"<b>建設フェーズ</b>：何個でも建てられます。空賊基地をタップするとレベルアップ。終わったら「建設を終える」。";
+    hint=S.ui.mode==="build"?`<b>${esc(buildName(S.ui.build,me))}</b> を建てるマスをタップ。<small>（1列目はA・B・G・Hだけ。マスの「+数字」は建物の得点に上乗せ）</small>`:"<b>建設フェーズ</b>：何個でも建てられます。空賊基地をタップするとレベルアップ。終わったら「建設を終える」。";
     ctrl=`<button class="primary" id="bbuildm">🏗 建てる</button>${S.ui.mode?`<button id="bcancel">やめる</button>`:""}${common}<div class="row" style="margin-top:8px;width:100%"><button class="primary grow" id="bbdone">建設を終える</button></div>`;
   }else{
     const res=ts.action==="labor"&&ts.laborRoll?`労働：ルーレット${ts.laborRoll} → +${yen(ts.laborGain)}。`:"";
@@ -1247,8 +1311,8 @@ function renderTurn(v){
 }
 function validTargets(me){
   const t=new Set();
-  if(S.view.sub==="prep"&&me.ts.stage==="move"){for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const r=me.king.r+dr,c=me.king.c+dc;if(inB(r,c)&&me.owner[idx(r,c)]===me.id)t.add(idx(r,c))}}
-  if(S.ui.mode==="build"){for(let i=0;i<64;i++){const r=Math.floor(i/8),c=i%8;if(!me.grid[i]&&me.owner[i]===me.id&&!me.flags[i]&&!(me.king.r===r&&me.king.c===c))t.add(i)}}
+  if(S.view.sub==="prep"&&me.ts.stage==="move")kingMoves(me).forEach(i=>t.add(i));
+  if(S.ui.mode==="build"){for(let i=0;i<64;i++){const r=Math.floor(i/8),c=i%8;if(!me.grid[i]&&me.owner[i]===me.id&&!me.flags[i]&&!(me.king.r===r&&me.king.c===c)&&!noBuildSq(r,c))t.add(i)}}
   return t;
 }
 /* ---------- 侵略・奪還の配置 ---------- */
@@ -1489,9 +1553,9 @@ function openSell(){
   const me=S.view.me;const d=$("#dlg");
   const m=me.grid.find(b=>b&&b.kind==="market");
   const avail=m&&m.opened&&m.openedTurn<S.view.turn;
-  d.innerHTML=`<b>資材を売る</b><div class="sub">1個50マリー／1ターン10個まで・2種類まで（今ターン：${me.ts.sold}個${me.ts.soldTypes.length?"・"+me.ts.soldTypes.map(r=>RES_JA[r]).join("、"):""}）</div>
+  d.innerHTML=`<b>資材を売る</b><div class="sub">1個50マリー／1ターン${me.ts.sellCap||10}個まで・${me.ts.sellTypes||2}種類まで${me.ts.sellCap?"（キングが売却所に止まったので増えています）":""}（今ターン：${me.ts.sold}個${me.ts.soldTypes.length?"・"+me.ts.soldTypes.map(r=>RES_JA[r]).join("、"):""}）</div>
   ${avail?`<div class="row" style="margin-top:8px"><select id="sres">${RES.map(r=>`<option value="${r}">${RES_FULL[r]}（${me.res[r]}個）</option>`).join("")}</select>
-  <input id="sn" type="number" min="1" max="10" value="${Math.max(1,Math.min(10-me.ts.sold,5))}" style="width:80px"><button class="primary" id="sgo">売る</button></div>`
+  <input id="sn" type="number" min="1" max="${me.ts.sellCap||10}" value="${Math.max(1,Math.min((me.ts.sellCap||10)-me.ts.sold,5))}" style="width:80px"><button class="primary" id="sgo">売る</button></div>`
   :`<div class="hint">${m&&m.opened?"売却所は開放した1ターン後から使えます。":"売却所がまだ開放されていません。キングを売却所のマスに止めると開放されます。"}</div>`}
   <div class="row" style="margin-top:8px"><button id="dclose">閉じる</button></div>`;
   d.showModal();
@@ -1532,6 +1596,7 @@ function openCost(tab){
     body+=row("空賊基地 Lv3→Lv4（同盟・覚醒後）",BASE_UP[3],"竜騎士王が作れる／毎ターン+300マリー／耐久5回。同盟・覚醒後はレベルアップのコストが1段ずり上がる（Lv2→3は石8・タク8、Lv3→4は石12・タク12・雲10）",!!(me&&me.boosted));
     body+=row("資材倉庫",BUILD.warehouse,"資材の上限 +10個／2点／耐久3回");
     body+=row(MARKET_REBUILD.name+"（建設）",MARKET_REBUILD,MARKET_REBUILD.eff,!!(me&&me.marketLost&&!me.grid.some(b=>b&&b.kind==="market")));
+    body+=`<div class="hint">建物の得点には、建てたマスの位置ボーナスが上乗せされます：外側0点／1つ内側+1点／2つ内側+2点／中央4マス+3点（盤面の「+数字」）。ランドマーク・資材倉庫・売却所も対象。旗は対象外</div>`;
     body+=`<div class="sub" style="margin:10px 0 6px">ランドマーク（5点・耐久5回・自分の島は抽選で決まった1種類だけ）</div>`;
     for(const l of LANDMARKS){
       const mine=me&&me.landmarkId===l.id;
@@ -1596,7 +1661,7 @@ function bind(){
   document.querySelectorAll("[data-allypick]").forEach(b=>b.onclick=()=>doAct({kind:"allyPick",target:b.dataset.allypick}));
   document.querySelectorAll("[data-rounds]").forEach(b=>b.onclick=()=>{S.game.rounds=+b.dataset.rounds;broadcast()});
   on("bnext",()=>doAct({kind:"nextRound"}));
-  document.querySelectorAll("[data-proxy]").forEach(b=>b.onclick=()=>{const id=b.dataset.proxy;if(!confirm(`${pname(id)}の代わりに進めますか？`))return;const err=proxyAct(S.game,id);if(err)toast(err);broadcast()});
+  document.querySelectorAll("[data-proxy]").forEach(b=>b.onclick=()=>{const id=b.dataset.proxy;if(!confirm(`${pname(id)}の代わりに進めますか？`))return;const err=safeApply(S.game,id,null,()=>proxyAct(S.game,id));if(err)toast(err);broadcast()});
   on("bcsv",downloadCSV);
   on("bunsquad",()=>doAct({kind:"unsquad"}));
   on("brepdone",()=>doAct({kind:"repairDone"}));
