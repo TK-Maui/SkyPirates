@@ -119,7 +119,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v0.9.1（2026/10/6版：参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v0.9.2（2026/10/6版：視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -991,7 +991,7 @@ function loadPeerJS(){
 function bcTransport(){
   class BCConn{constructor(ch,self,other){this.ch=ch;this.self=self;this.peer=other;this.h={};this.open=true}
     on(e,f){(this.h[e]=this.h[e]||[]).push(f)} emit(e,x){(this.h[e]||[]).forEach(f=>f(x))}
-    send(d){this.ch.postMessage({to:this.peer,from:this.self,d})}}
+    send(d){if(new TextEncoder().encode(JSON.stringify(d)).length>16384){console.warn("BC: 16KBを超えたので届かない（実機の再現）");return}this.ch.postMessage({to:this.peer,from:this.self,d})}}
   class BCPeer{constructor(id){this.id=id||("g"+Math.random().toString(36).slice(2,8));this.h={};this.conns={};
       this.ch=new BroadcastChannel("ukishima-test");
       this.ch.onmessage=e=>{const m=e.data;if(m.to!==this.id)return;
@@ -1010,10 +1010,30 @@ async function makePeer(id){
 }
 const peerId = code=>"ukishima-kuzoku-"+code;
 
+/* 大きいメッセージは分割して送る（端末によっては1通16KBを超えると届かず、視察フェーズ以降に止まる原因になっていた） */
+const PART_CHARS=4000; // 日本語でも1通あたり約12KB以内
+function sendMsg(conn,obj){
+  if(!conn||conn.open===false)return false;
+  const s=JSON.stringify(obj);
+  if(s.length<=PART_CHARS){conn.send(obj);return true}
+  const id=(S.msgSeq=(S.msgSeq||0)+1);const n=Math.ceil(s.length/PART_CHARS);
+  for(let i=0;i<n;i++)conn.send({t:"part",id,i,n,d:s.slice(i*PART_CHARS,(i+1)*PART_CHARS)});
+  return true;
+}
+/* 分割されたメッセージを組み立てる。組み立て終わったら元のメッセージを返す（途中ならnull） */
+function joinPart(conn,msg){
+  if(msg.t!=="part")return msg;
+  const box=conn.__parts||(conn.__parts={});
+  const b=box[msg.id]||(box[msg.id]={n:msg.n,got:0,d:[]});
+  if(b.d[msg.i]==null){b.d[msg.i]=msg.d;b.got++}
+  if(b.got<b.n)return null;
+  delete box[msg.id];for(const k of Object.keys(box))if(+k<msg.id)delete box[k];
+  try{return JSON.parse(b.d.join(""))}catch(e){console.error(e);return null}
+}
 function saveHost(){try{localStorage.setItem("ukishima_host_"+S.code,JSON.stringify(S.game));localStorage.setItem("ukishima_last_host",S.code)}catch(e){}}
 function broadcast(){
   if(S.mode==="host"){
-    for(const [pid,conn] of S.conns){try{conn.open!==false&&conn.send({t:"state",view:viewFor(S.game,pid),code:S.code})}catch(e){console.error(e)}}
+    for(const [pid,conn] of S.conns){try{sendMsg(conn,{t:"state",view:viewFor(S.game,pid),code:S.code})}catch(e){console.error(e);const p=S.game.players.find(q=>q.id===pid);toast(`${p?p.name:pid}さんへの送信に失敗しました`)}}
     saveHost();
   }
   try{S.view=viewFor(S.game,S.seat);render()}catch(e){console.error(e);toast("画面の表示でエラー："+e.message)}
@@ -1038,7 +1058,7 @@ async function hostCreate(name,resumeCode){
   keepAwake();
   document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.mode==="host"){keepAwake();try{if(S.peer&&S.peer.disconnected)S.peer.reconnect()}catch(e){}broadcast()}});
   peer.on("connection",conn=>{
-    conn.on("data",msg=>hostOnData(conn,msg));
+    conn.on("data",m=>{const msg=joinPart(conn,m);if(msg)hostOnData(conn,msg)});
     conn.on("close",()=>{for(const [pid,c] of S.conns)if(c===conn){S.conns.delete(pid);const p=S.game.players.find(q=>q.id===pid);if(p){p.connected=false}broadcast()}});
   });
 }
@@ -1047,7 +1067,7 @@ async function keepAwake(){try{if("wakeLock" in navigator&&document.visibilitySt
 function hostOnData(conn,msg){
   const g=S.game;
   if(msg.t==="hb")return;
-  if(msg.t==="sync"){let pid=null;for(const [k,c] of S.conns)if(c===conn)pid=k;if(pid)try{conn.send({t:"state",view:viewFor(g,pid),code:S.code})}catch(e){}return}
+  if(msg.t==="sync"){let pid=null;for(const [k,c] of S.conns)if(c===conn)pid=k;if(pid)try{sendMsg(conn,{t:"state",view:viewFor(g,pid),code:S.code})}catch(e){}return}
   if(msg.t==="join"){
     let p=msg.token&&g.players.find(q=>q.token===msg.token);
     if(!p){
@@ -1104,8 +1124,9 @@ async function guestJoin(code,name,tries){
     const conn=peer.connect(peerId(S.code),{reliable:true,serialization:"json"});
     S.hostConn=conn;S.joinStage=S.view?S.joinStage:"host";
     conn.on("open",()=>{if(!S.view)S.joinStage="join";conn.send({t:"join",name,token:getToken(S.code,name)})});
-    conn.on("data",msg=>{
+    conn.on("data",m=>{
       S.lastMsg=Date.now();if(S.stale){S.stale=false;render()}
+      const msg=joinPart(conn,m);if(!msg)return;
       if(msg.t==="hb")return;
       if(msg.t==="welcome"){S.seat=msg.pid;try{localStorage.setItem("ukishima_last_guest",JSON.stringify({code:S.code,name}))}catch(e){}}
       else if(msg.t==="state"){S.view=msg.view;clearInterval(S.joinTimer);render()}
@@ -1137,7 +1158,7 @@ function localStart(names,rounds){
   S.seat="P1";startSetup(S.game);broadcast();
 }
 function doAct(a){
-  if(S.mode==="guest"){if(!S.hostConn||S.lost){toast("接続されていません");return}S.hostConn.send({t:"act",a});return}
+  if(S.mode==="guest"){if(!S.hostConn||S.lost){toast("接続されていません");return}sendMsg(S.hostConn,{t:"act",a});return}
   const err=safeApply(S.game,S.seat,a);if(err)toast(err);
   if(S.mode==="local"){try{localStorage.setItem("ukishima_local",JSON.stringify(S.game))}catch(e){}}
   broadcast();
