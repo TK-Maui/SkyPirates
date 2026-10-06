@@ -119,7 +119,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v0.9.5（2026/10/7版：同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v0.9.6（2026/10/7版：奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -695,7 +695,7 @@ const ACT_JA={labor:"労働",build:"建設",invade:"侵略",retake:"奪還"};
 function validatePlan(g,p,plan,mode){
   if(!plan||!Array.isArray(plan.units))return "配置がありません";
   const units=plan.units;
-  if(!units.length)return "キャラを1体以上配置してください";
+  if(!units.length&&mode!=="retake")return "キャラを1体以上配置してください";
   // 侵略の配置では、編成で決めたキャラをそのまま使う（編成のあとで狼煙の塔や基地が壊されても、出撃済みのキャラは配置できる）
   const fixed=mode==="invade"&&!plan.dryRun;
   if(!fixed&&units.length>maxUnits(p))return `1回に出撃できるのは${maxUnits(p)}体までです`;
@@ -899,7 +899,7 @@ function resolveRetakes(g){
       const got=[];for(const [r,c] of [[u.r,u.c],[u.r2,u.c2]]){const i=idx(r,c);if(p.owner[i]!==p.id&&!p.flags[i]){const prev=p.owner[i];p.owner[i]=p.id;got.push(sq(r,c));logP(g,P_OF(g,prev),`${p.name}の島で取った領土(${sq(r,c)})を取り返された`)}}
       log.push(`天翔使い：${got.length?got.join("・")+"を取り返した":"取り返せるマスなし（旗が残っている、またはもともと自分の領土）"}`);
     }
-    logP(g,p,`奪還：${log.join("。")}`);
+    logP(g,p,`奪還：${log.length?log.join("。"):"出撃できるキャラがいないため、出撃なし"}`);
   }
   endOfTurn(g);
 }
@@ -1575,7 +1575,8 @@ function plannerHTML(v){
     <div class="hint">${P.pick?how[P.pick]:"出すキャラ（基地）を選んでから、盤面のマスをタップしてください。"}</div></div>`;
   h+=legendHTML()+boardHTML(isl,{targets:tg,marks,range,caption:`${mode==="invade"?"侵略先（今の状態）":"自分の島"}／オレンジ枠＝竜騎士の攻撃範囲`});
   h+=`<div class="panel"><b>配置</b>${P.units.length?`<div class="plist">${P.units.map((u,k)=>`<div class="row"><span class="grow">${CHARS[u.type].name}${u.type==="ryuou"?"#"+u.id:"（基地"+esc(u.base)+"）"}：${sq(u.r,u.c)}${u.type==="tenshou"?"＋"+sq(u.r2,u.c2):""}</span><button data-unrm="${k}">外す</button></div>`).join("")}</div>`:`<div class="sub">まだ配置していません</div>`}
-    <div class="row" style="margin-top:8px"><button class="primary grow" id="bplan" ${allPlaced?"":"disabled"}>${mode==="invade"?"侵略":"奪還"}を確定</button><button id="bplanclr">全部外す</button></div></div>`;
+    <div class="row" style="margin-top:8px"><button class="primary grow" id="bplan" ${allPlaced?"":"disabled"}>${mode==="invade"?"侵略":"奪還"}を確定</button><button id="bplanclr">全部外す</button></div>
+    ${mode==="retake"?`<div class="row" style="margin-top:6px"><button class="grow" id="bplanskip">奪還せずに終える${P.units.length?"（配置したキャラは出さない）":""}</button></div>`:""}</div>`;
   return h;
 }
 /* 侵略時の天翔使いが選べないマス（画面用）：建っている建物とキングのいるマス */
@@ -1831,6 +1832,7 @@ function bind(){
   on("brepdone",()=>doAct({kind:"repairDone"}));
   if(S.view&&S.view.sub==="repair")document.querySelectorAll(".panel [data-rep]").forEach(b=>b.onclick=()=>doAct({kind:"repair",i:+b.dataset.rep}));
   on("bplanclr",()=>{S.ui.plan.units=[];S.ui.plan.first=null;render()});
+  on("bplanskip",()=>{if(S.ui.plan.units.length&&!confirm("配置したキャラは出さずに、奪還を終えますか？"))return;doAct({kind:"plan",plan:{units:[]}})});
   on("bplan",()=>{const P=S.ui.plan;doAct({kind:"plan",plan:{target:P.target,units:P.units}})});
   on("bunplan",()=>doAct({kind:"unplan"}));
   on("brepair",()=>openRepair());
