@@ -119,7 +119,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v0.9.2（2026/10/6版：視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v0.9.3（2026/10/6版：直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -1009,6 +1009,88 @@ async function makePeer(id){
   await loadPeerJS();return id?new Peer(id,{debug:1}):new Peer({debug:1});
 }
 const peerId = code=>"ukishima-kuzoku-"+code;
+/* ================= 中継通信（MQTT over WebSocket） =================
+   端末どうしが直接つながらない回線の組み合わせのときに、公開の中継サーバーを経由して通信する。
+   部屋を作った人は常に中継でも待ち受け、子は直接つながらなければ中継に切り替える。 */
+const _qs=new URLSearchParams(location.search);
+const RELAY_URLS=_qs.get("broker")?[_qs.get("broker")]:["wss://broker.emqx.io:8084/mqtt","wss://broker.hivemq.com:8884/mqtt"];
+const NO_P2P=_qs.get("nop2p")==="1";
+class MiniMQTT{
+  constructor(url){this.url=url;this.h={};this.buf=new Uint8Array(0);this.pid=1;this.ok=false}
+  on(e,f){this.h[e]=f}
+  _emit(e,x){this.h[e]&&this.h[e](x)}
+  static u8(s){return new TextEncoder().encode(s)}
+  static str(s){const b=MiniMQTT.u8(s);const o=new Uint8Array(2+b.length);o[0]=b.length>>8;o[1]=b.length&255;o.set(b,2);return o}
+  static len(n){const o=[];do{let d=n%128;n=Math.floor(n/128);if(n)d|=128;o.push(d)}while(n);return o}
+  static pkt(type,parts){const body=parts.reduce((a,p)=>a+p.length,0);const head=[type,...MiniMQTT.len(body)];const o=new Uint8Array(head.length+body);o.set(head,0);let i=head.length;for(const p of parts){o.set(p,i);i+=p.length}return o}
+  connect(){return new Promise((res,rej)=>{
+    let ws;try{ws=new WebSocket(this.url,"mqtt")}catch(e){return rej(e)}
+    ws.binaryType="arraybuffer";this.ws=ws;
+    const tm=setTimeout(()=>{try{ws.close()}catch(e){}rej(new Error("timeout"))},8000);
+    ws.onopen=()=>{const id="sp"+Math.random().toString(36).slice(2,12);
+      ws.send(MiniMQTT.pkt(0x10,[MiniMQTT.str("MQTT"),new Uint8Array([4,2,0,60]),MiniMQTT.str(id)]))};
+    ws.onmessage=ev=>{const d=new Uint8Array(ev.data);const nb=new Uint8Array(this.buf.length+d.length);nb.set(this.buf);nb.set(d,this.buf.length);this.buf=nb;
+      while(this.buf.length>=2){let i=1,mul=1,rl=0,done=false;
+        while(i<this.buf.length){const c=this.buf[i++];rl+=(c&127)*mul;mul*=128;if(!(c&128)){done=true;break}}
+        if(!done||i+rl>this.buf.length)break;
+        const t=this.buf[0]>>4,body=this.buf.slice(i,i+rl);this.buf=this.buf.slice(i+rl);
+        if(t===2){clearTimeout(tm);if(body[1]===0){this.ok=true;this.ping=setInterval(()=>{try{ws.send(new Uint8Array([0xC0,0]))}catch(e){}},30000);res(this)}else rej(new Error("refused"))}
+        else if(t===3){const tl=(body[0]<<8)|body[1];const topic=new TextDecoder().decode(body.slice(2,2+tl));const p=2+tl;
+          this._emit("message",{topic,text:new TextDecoder().decode(body.slice(p))})}
+      }};
+    ws.onerror=()=>{clearTimeout(tm);if(!this.ok)rej(new Error("ws error"))};
+    ws.onclose=()=>{clearTimeout(tm);clearInterval(this.ping);const was=this.ok;this.ok=false;if(was)this._emit("close");else rej(new Error("closed"))};
+  })}
+  subscribe(topic){const id=this.pid++;this.ws.send(MiniMQTT.pkt(0x82,[new Uint8Array([id>>8,id&255]),MiniMQTT.str(topic),new Uint8Array([0])]))}
+  publish(topic,text){if(!this.ok)return false;this.ws.send(MiniMQTT.pkt(0x30,[MiniMQTT.str(topic),MiniMQTT.u8(text)]));return true}
+  close(){try{this.ws.send(new Uint8Array([0xE0,0]));this.ws.close()}catch(e){}}
+}
+const relayTopic=(code,who)=>"skypirates/v1/"+code+"/"+who;
+/* 中継のつながり：PeerJSのつながりと同じ形（send / on("open"|"data"|"close") / open）にそろえる */
+class RelayConn{
+  constructor(cli,topicOut){this.cli=cli;this.out=topicOut;this.h={};this.open=false;this.relay=true}
+  on(e,f){(this.h[e]=this.h[e]||[]).push(f)}
+  emit(e,x){(this.h[e]||[]).forEach(f=>f(x))}
+  send(d){if(!this.cli.publish(this.out,JSON.stringify({k:"d",d})))throw new Error("中継が切れています")}
+  close(){this.open=false;this.closed=true}
+}
+/* 部屋を作った人：中継サーバーで待ち受ける（つながらなくても、直接通信はそのまま使える） */
+async function hostRelayListen(){
+  S.relayConns=S.relayConns||{};
+  for(const url of RELAY_URLS){
+    try{
+      const cli=new MiniMQTT(url);await cli.connect();
+      cli.subscribe(relayTopic(S.code,"host"));
+      cli.on("message",({text})=>{let m;try{m=JSON.parse(text)}catch(e){return}
+        if(!m||!m.f)return;const key=url+"|"+m.f;
+        if(m.k==="hello"){let c=S.relayConns[key];
+          if(!c||c.closed){c=S.relayConns[key]=new RelayConn(cli,relayTopic(S.code,"g-"+m.f));
+            c.on("data",x=>{const msg=joinPart(c,x);if(msg)hostOnData(c,msg)});c.open=true}
+          cli.publish(relayTopic(S.code,"g-"+m.f),JSON.stringify({k:"ack"}));return}
+        if(m.k==="d"){const c=S.relayConns[key];if(c)c.emit("data",m.d)}
+      });
+      cli.on("close",()=>{setTimeout(()=>{if(S.mode==="host")hostRelayListen()},5000)});
+      (S.relayClis=S.relayClis||[]).push(cli);
+    }catch(e){console.warn("中継サーバーに接続できません",url,e)}
+  }
+}
+/* 子：中継サーバー経由で部屋につなぐ。成功すると RelayConn を返す */
+function guestRelayConnect(url){return new Promise(async(res,rej)=>{
+  const me=(S.relayId=S.relayId||Math.random().toString(36).slice(2,10));
+  let cli;try{cli=new MiniMQTT(url);await cli.connect()}catch(e){return rej(e)}
+  const c=new RelayConn(cli,relayTopic(S.code,"host"));
+  c.send=d=>{if(!cli.publish(relayTopic(S.code,"host"),JSON.stringify({k:"d",f:me,d})))throw new Error("中継が切れています")};
+  c.close=()=>{c.closed=true;clearInterval(hi);cli.close()};
+  cli.subscribe(relayTopic(S.code,"g-"+me));
+  cli.on("message",({text})=>{let m;try{m=JSON.parse(text)}catch(e){return}
+    if(m.k==="ack"&&!c.open){c.open=true;clearInterval(hi);c.emit("open");res(c)}
+    else if(m.k==="d")c.emit("data",m.d)});
+  cli.on("close",()=>{if(!c.closed)c.emit("close")});
+  const hello=()=>cli.publish(relayTopic(S.code,"host"),JSON.stringify({k:"hello",f:me}));
+  const hi=setInterval(hello,2000);setTimeout(hello,300);
+  setTimeout(()=>{if(!c.open){clearInterval(hi);cli.close();rej(new Error("no host"))}},12000);
+})}
+
 
 /* 大きいメッセージは分割して送る（端末によっては1通16KBを超えると届かず、視察フェーズ以降に止まる原因になっていた） */
 const PART_CHARS=4000; // 日本語でも1通あたり約12KB以内
@@ -1044,17 +1126,20 @@ async function hostCreate(name,resumeCode){
   else{S.game=newGame();const p=newPlayer("P1",name);S.game.players.push(p)}
   S.seat="P1";
   renderMsg("部屋を作っています…");
+  hostRelayListen();
   let peer;
-  try{peer=await makePeer(peerId(S.code))}catch(e){renderMsg(e.message,true);return}
+  try{peer=await makePeer(peerId(S.code))}catch(e){toast("直接通信の準備ができませんでした（中継で待ち受けます）");broadcast();return}
   S.peer=peer;
   peer.on("open",()=>{broadcast()});
+  setTimeout(()=>{if(!S.view)broadcast()},8000);
   peer.on("error",e=>{
-    if(e.type==="unavailable-id"){renderMsg("前の接続がまだ残っています。10秒ほど待ってからもう一度「再開」を押してください。",true)}
+    if(e.type==="unavailable-id"){toast("前の接続がまだ残っているため直接通信は使えません。中継で待ち受けます");broadcast()}
     else toast("通信エラー："+(e.type||e.message));
   });
   peer.on("disconnected",()=>{try{peer.reconnect()}catch(e){}});
   // 生存確認：5秒ごとに全員へ合図を送る（止まっていないことを子の画面が確認できる）
   clearInterval(S.hb);S.hb=setInterval(()=>{for(const [,c] of S.conns){try{c.open!==false&&c.send({t:"hb"})}catch(e){}}},5000);
+  if(!S.relayWatch)S.relayWatch=setInterval(()=>{if(S.mode==="host"&&!(S.relayClis||[]).some(c=>c.ok)){S.relayClis=[];hostRelayListen()}},30000);
   keepAwake();
   document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.mode==="host"){keepAwake();try{if(S.peer&&S.peer.disconnected)S.peer.reconnect()}catch(e){}broadcast()}});
   peer.on("connection",conn=>{
@@ -1091,7 +1176,7 @@ function hostOnData(conn,msg){
 }
 function getToken(code,name){const k="ukishima_tok_"+code+"_"+name;let t=localStorage.getItem(k);if(!t){t=Math.random().toString(36).slice(2)+Date.now().toString(36);try{localStorage.setItem(k,t)}catch(e){}}return t}
 /* 子の参加：段階ごとに見張り、止まったら自動でやり直す（最大3回）。それでもだめなら理由と対処を表示 */
-const JOIN_STAGE={lib:"通信の準備をしています",server:"通信サーバーにつないでいます",host:"部屋を作った人の端末につないでいます",join:"部屋に入っています"};
+const JOIN_STAGE={relay:"中継サーバー経由でつないでいます",lib:"通信の準備をしています",server:"通信サーバーにつないでいます",host:"部屋を作った人の端末につないでいます",join:"部屋に入っています"};
 function joinMsg(stage,tries,sec){
   $("#app").innerHTML=`<h1>SkyPirates テスト版</h1><div class="panel">部屋に接続しています…<div class="sub" style="margin-top:6px">${esc(JOIN_STAGE[stage]||"")}（${sec}秒${tries>1?`・${tries}回目`:""}）</div>
   <div class="row" style="margin-top:10px"><button id="bjretry">もう一度試す</button><button onclick="location.href=location.pathname">タイトルに戻る</button></div></div>`;
@@ -1101,7 +1186,8 @@ function joinFail(stage){
   const why={lib:"通信の準備ができませんでした（電波が弱いか、通信が制限されています）。",
     server:"通信サーバーにつながりませんでした（電波が弱いか、通信が制限されています）。",
     host:"部屋を作った人の端末とつながりませんでした。作った人の画面が閉じている・スリープしている、または回線の組み合わせによってはつながらないことがあります。",
-    join:"部屋に入れませんでした。"}[stage]||"";
+    join:"部屋に入れませんでした。",
+    relay:"中継サーバー経由でもつながりませんでした。部屋を作った人の画面が閉じている・スリープしている可能性があります。"}[stage]||"";
   $("#app").innerHTML=`<h1>SkyPirates テスト版</h1><div class="panel" style="border-color:var(--warn)"><b>接続できませんでした</b><div class="sub" style="margin-top:6px">${esc(why)}</div>
   <div class="sub" style="margin-top:6px">試すこと：<br>① Wi-Fiとモバイルデータを切り替える（Wi-Fiを切る／入れる）<br>② 部屋を作った人に、ゲーム画面を開いたままにしてもらう<br>③ 別のブラウザ（Chrome／Safari）で開き直す<br>つながらない間は、部屋を作った人が「代わりに進める」でゲームを進められます。</div>
   <div class="row" style="margin-top:10px"><button class="primary" id="bjretry">もう一度試す</button><button onclick="location.href=location.pathname">タイトルに戻る</button></div></div>`;
@@ -1111,44 +1197,60 @@ async function guestJoin(code,name,tries){
   tries=tries||1;
   S.mode="guest";S.code=code.toUpperCase();S.myName=name;S.view=null;
   clearInterval(S.joinTimer);clearInterval(S.watch);
+  try{S.hostConn&&S.hostConn.relay&&S.hostConn.close()}catch(e){}
   try{S.peer&&S.peer.destroy&&S.peer.destroy()}catch(e){}
-  S.joinStage="lib";const t0=Date.now();
-  const retry=()=>{clearInterval(S.joinTimer);if(S.view)return;if(tries<3)guestJoin(S.code,name,tries+1);else joinFail(S.joinStage)};
+  // 1回目は直接通信、2回目以降は中継（前回この部屋で中継を使ったなら最初から中継）
+  let prefRelay=false;try{prefRelay=localStorage.getItem("ukishima_relay_"+S.code)==="1"}catch(e){}
+  const useRelay=NO_P2P||prefRelay||tries>=2;
+  const relayUrl=RELAY_URLS[(prefRelay||NO_P2P?tries-1:tries-2)%RELAY_URLS.length];
+  S.via=useRelay?"relay":"p2p";
+  S.joinStage=useRelay?"relay":"lib";const t0=Date.now();
+  const maxTries=useRelay&&tries===1?2:3;
+  const retry=()=>{clearInterval(S.joinTimer);if(S.view)return;if(tries<maxTries+(prefRelay?0:0))guestJoin(S.code,name,tries+1);else joinFail(S.joinStage)};
   joinMsg(S.joinStage,tries,0);
   S.joinTimer=setInterval(()=>{if(S.view){clearInterval(S.joinTimer);return}const sec=Math.round((Date.now()-t0)/1000);
-    if(sec>=15)retry();else joinMsg(S.joinStage,tries,sec)},1000);
-  let peer;try{peer=await makePeer()}catch(e){clearInterval(S.joinTimer);if(tries<3)return guestJoin(S.code,name,tries+1);return joinFail("lib")}
-  if(S.view)return;
-  S.peer=peer;S.joinStage="server";
-  const connect=()=>{
-    const conn=peer.connect(peerId(S.code),{reliable:true,serialization:"json"});
-    S.hostConn=conn;S.joinStage=S.view?S.joinStage:"host";
-    conn.on("open",()=>{if(!S.view)S.joinStage="join";conn.send({t:"join",name,token:getToken(S.code,name)})});
-    conn.on("data",m=>{
-      S.lastMsg=Date.now();if(S.stale){S.stale=false;render()}
-      const msg=joinPart(conn,m);if(!msg)return;
-      if(msg.t==="hb")return;
-      if(msg.t==="welcome"){S.seat=msg.pid;try{localStorage.setItem("ukishima_last_guest",JSON.stringify({code:S.code,name}))}catch(e){}}
-      else if(msg.t==="state"){S.view=msg.view;clearInterval(S.joinTimer);render()}
-      else if(msg.t==="err"){toast(msg.msg);if(!S.view){clearInterval(S.joinTimer);renderMsg(msg.msg,true)}}
-    });
-    conn.on("close",()=>{if(conn!==S.hostConn)return;if(!S.view)return;toast("接続が切れました。「再接続」を押してください");S.lost=true;render()});
+    if(sec>=(useRelay?20:15))retry();else joinMsg(S.joinStage,tries,sec)},1000);
+  const onData=(conn,m)=>{
+    S.lastMsg=Date.now();if(S.stale){S.stale=false;render()}
+    const msg=joinPart(conn,m);if(!msg)return;
+    if(msg.t==="hb")return;
+    if(msg.t==="welcome"){S.seat=msg.pid;try{localStorage.setItem("ukishima_last_guest",JSON.stringify({code:S.code,name}));localStorage.setItem("ukishima_relay_"+S.code,conn.relay?"1":"0")}catch(e){}}
+    else if(msg.t==="state"){S.view=msg.view;clearInterval(S.joinTimer);render()}
+    else if(msg.t==="err"){toast(msg.msg);if(!S.view){clearInterval(S.joinTimer);renderMsg(msg.msg,true)}}
   };
-  peer.on("open",connect);
-  peer.on("error",e=>{
-    if(!S.view){ // 参加中のエラーはやり直す（部屋が見つからないときだけはすぐ知らせる）
-      if(e.type==="peer-unavailable"&&tries>=2){clearInterval(S.joinTimer);renderMsg("部屋が見つかりません。部屋番号を確かめるか、作った人の画面が開いているか確認してください。",true);return}
-      return retry();}
-    toast("通信エラー："+(e.type||e.message))});
-  peer.on("disconnected",()=>{try{peer.reconnect()}catch(e){}});
-  S.reconnect=()=>{if(peer.destroyed){guestJoin(S.code,name,1);return}
+  const wire=conn=>{
+    S.hostConn=conn;
+    conn.on("data",m=>onData(conn,m));
+    conn.on("close",()=>{if(conn!==S.hostConn)return;if(!S.view)return;toast("接続が切れました。つなぎ直しています");S.reconnect&&S.reconnect()});
+  };
+  const sendJoin=conn=>{if(!S.view)S.joinStage="join";conn.send({t:"join",name,token:getToken(S.code,name)})};
+  let connect;
+  if(useRelay){
+    connect=async()=>{try{const c=await guestRelayConnect(relayUrl);if(S.via!=="relay")return c.close();wire(c);sendJoin(c)}catch(e){if(!S.view)retry()}};
+  }else{
+    let peer;try{peer=await makePeer()}catch(e){clearInterval(S.joinTimer);return guestJoin(S.code,name,tries+1)}
+    if(S.view)return;
+    S.peer=peer;S.joinStage="server";
+    connect=()=>{
+      const conn=peer.connect(peerId(S.code),{reliable:true,serialization:"json"});
+      S.joinStage=S.view?S.joinStage:"host";wire(conn);
+      conn.on("open",()=>sendJoin(conn));
+    };
+    peer.on("open",connect);
+    peer.on("error",e=>{if(!S.view)return retry();toast("通信エラー："+(e.type||e.message))});
+    peer.on("disconnected",()=>{try{peer.reconnect()}catch(e){}});
+  }
+  if(useRelay)connect();
+  S.reconnect=()=>{
+    if(S.via==="relay"){const old=S.hostConn;S.hostConn=null;try{old&&old.close()}catch(e){}connect();return}
+    const peer=S.peer;if(!peer||peer.destroyed){guestJoin(S.code,name,1);return}
     S.lost=false;const old=S.hostConn;S.hostConn=null;try{old&&old.close&&old.close()}catch(e){}try{if(peer.disconnected)peer.reconnect()}catch(e){}connect()};
   // 親からの合図が15秒届かなければ「止まっている」と表示し、自動で再接続を試す
   S.lastMsg=Date.now();
   S.watch=setInterval(()=>{if(!S.view||S.lost)return;const gap=Date.now()-S.lastMsg;
     if(gap>15000&&!S.stale){S.stale=true;render()}
     if(gap>20000&&Date.now()-(S.lastTry||0)>20000){S.lastTry=Date.now();S.reconnect()}
-    if(gap>60000&&Date.now()-(S.lastFull||0)>60000){S.lastFull=Date.now();guestJoin(S.code,name,1)}  // 1分たってもだめなら最初からつなぎ直す
+    if(gap>60000&&Date.now()-(S.lastFull||0)>60000){S.lastFull=Date.now();guestJoin(S.code,name,S.via==="relay"?2:1)}
   },5000);
 }
 if(!window.__visHook){window.__visHook=1;document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.mode==="guest"&&S.view&&Date.now()-(S.lastMsg||0)>8000&&S.reconnect)S.reconnect()})}
