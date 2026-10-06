@@ -70,6 +70,9 @@ body.titlebg .panel{background:color-mix(in srgb,var(--panel) 82%,transparent);-
 body.titlebg.noimg .tbg{display:none}
 body.titlebg.noimg .ttl{color:var(--ink);padding-top:8px;text-shadow:none}
 .ttl{display:none}body.titlebg .ttl{display:block}
+.timerbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:4px 0 6px}
+#timerbadge{font-weight:700;background:var(--panel);border:1px solid var(--line);border-radius:99px;padding:2px 10px}
+#timerbadge.warn{background:var(--warn);color:#fff;border-color:var(--warn)}
 .toast{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 14px;border-radius:10px;max-width:90vw;z-index:10;font-size:14px}
 .pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;background:var(--bg);border:1px solid var(--line)}
 .pill.ok{color:var(--ok);border-color:var(--ok)}
@@ -119,7 +122,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v0.9.6（2026/10/7版：奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v0.9.7（2026/10/7版：フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -759,6 +762,9 @@ const SQ_TYPES=["tenshou","kuzoku","ryukishi"];
 /* 編成：{sel:{"A|tenshou":2,...}, kings:[id]} */
 function normSquad(sq){const o={sel:{},kings:[]};if(sq&&sq.sel)Object.keys(sq.sel).sort().forEach(k=>{if(sq.sel[k]>0)o.sel[k]=sq.sel[k]|0});if(sq&&sq.kings)o.kings=[...sq.kings].map(Number).sort((a,b)=>a-b);return o}
 function squadTypes(sq){const o={};for(const [k,n] of Object.entries((sq&&sq.sel)||{})){const t=k.split("|")[1];o[t]=(o[t]||0)+n}return o}
+/* 竜騎士王の攻撃回数と範囲（強化の結果を分かりやすく） */
+function kingStat(up){const h=(up&&up.houkou)||0,s=(up&&up.shinsou)||0,k=up&&up.kamui;return `攻撃${1+h}回・範囲${s?"+"+s+"列":"通常"}${k?"・神威（領土も取る）":""}`}
+function kingLabel(up){return `${upText(up)}／${kingStat(up)}`}
 function upText(up){if(!up)return "強化なし";const t=[];if(up.houkou)t.push("咆哮"+up.houkou);if(up.shinsou)t.push("伸槍"+up.shinsou);if(up.kamui)t.push("神威");return t.join("・")||"強化なし"}
 function squadText(sq){const o=normSquad(sq);const t=Object.entries(o.sel).map(([k,n])=>{const [b,ty]=k.split("|");return `${CHARS[ty].name}×${n}（基地${b}）`});if(o.kings.length)t.push("竜騎士王×"+o.kings.length);return t.join("・")||"なし"}
 function kingPower(c){return 1+((c.up&&c.up.houkou)||0)}
@@ -949,7 +955,7 @@ const REC_COLS=[["round","ラウンド"],["name","名前"],["total","合計点"]
   ["landmark","ランドマーク"],["lmTurn","LM建設ターン"],["ally","同盟・覚醒"],["labor","労働(回)"],["build","建設(回)"],["invade","侵略(回)"],["retake","奪還(回)"],["seq","アクション順"],
   ["laborMoney","労働収入"],["kingMoney","キングの建物収入"],["moneyEnd","最終所持金"],["destroyB","建物破壊"],["destroyL","LM破壊"],["kills","瀕死にした"],["downed","瀕死にされた"],["lostB","壊された建物"],["repairs","修繕"],
   ["sold","売却(個)"],["lostRes","消滅資材(個)"],["genT","天翔使い生成"],["genK","空賊生成"],["genR","竜騎士生成"],["genO","竜騎士王生成"],["upH","咆哮"],["upS","伸槍"],["upK","神威"],["skipped","代行された回数"]];
-function islandView(p){return {id:p.id,name:p.name,grid:p.grid,owner:p.owner,flags:p.flags,dmg:p.dmg,king:p.king,kingDmg:p.kingDmg,kingDownTurn:p.kingDownTurn,landmarkId:p.landmarkId,sealedTurn:p.sealedTurn,
+function islandView(p){return {id:p.id,name:p.name,grid:p.grid,chars:p.chars.map(c=>({id:c.id,type:c.type,base:c.base,restUntil:c.restUntil,up:c.up||null,floating:!!c.floating})),owner:p.owner,flags:p.flags,dmg:p.dmg,king:p.king,kingDmg:p.kingDmg,kingDownTurn:p.kingDownTurn,landmarkId:p.landmarkId,sealedTurn:p.sealedTurn,
   kings:p.chars.filter(c=>c.type==="ryuou").map(c=>({base:c.base,up:c.up})),gens:p.grid.filter(b=>b&&b.kind==="base"&&b.gen&&b.gen.type==="ryuou").map(b=>({label:b.label,up:b.gen.up,readyTurn:b.gen.readyTurn}))}}
 function viewFor(g,pid){
   const reveal=g.phase==="inspect"||g.phase==="result"||g.turn>INSPECT_AFTER;
@@ -964,7 +970,7 @@ function viewFor(g,pid){
   if(g.sub==="ally"&&g.ally&&me){const A=g.ally;const isApp=A.applicants.includes(pid);
     ally={mode:A.mode,step:A.step,applicants:A.applicants,isApp,answered:pid in A.answers,picked:!!A.picks[pid],third:A.thirdBy===pid,
       cands:isApp?allyCands(g,pid):[],partner:A.mode==="double"?A.applicants.find(x=>x!==pid):null}}
-  return {phase:g.phase,sub:g.sub,turn:g.turn,round:g.round,rounds:g.rounds,r1:g.r1,r2:g.r2||null,ally,pending:pendingIds(g),records:g.phase==="result"?(g.records||[]):null,me:me?publicSelf(me,g):null,waiting,inv,
+  return {timers:g.timers||null,timer:timerInfo(g),phase:g.phase,sub:g.sub,turn:g.turn,round:g.round,rounds:g.rounds,r1:g.r1,r2:g.r2||null,ally,pending:pendingIds(g),records:g.phase==="result"?(g.records||[]):null,me:me?publicSelf(me,g):null,waiting,inv,
     players:g.players.map(p=>({id:p.id,name:p.name,boosted:p.boosted,awakened:p.awakened,allyWith:p.allyWith})),
     others:g.players.filter(p=>p.id!==pid).map(p=>({id:p.id,name:p.name,connected:p.connected,setupDone:p.setupDone,decided:p.ts.stage==="decided",inspectDone:p.inspectDone,
       board:reveal?islandView(p):null,
@@ -1259,6 +1265,66 @@ async function guestJoin(code,name,tries){
   },5000);
 }
 if(!window.__visHook){window.__visHook=1;document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible"&&S.mode==="guest"&&S.view&&Date.now()-(S.lastMsg||0)>8000&&S.reconnect)S.reconnect()})}
+/* ================= フェーズの制限時間 =================
+   部屋を作った人が「⚙ 設定」でフェーズごとにオン・オフと秒数（5〜300秒）を決める。
+   時間切れになると、そのフェーズで待っている人を「代わりに進める」と同じ形で自動で進める。 */
+const TIMER_PHASES=[
+  ["setup","キングの配置（ゲーム開始時）","8列目のどこかに自動で置く"],
+  ["prep","支給〜アクション選択（キング移動・キャラ生成・アクション）","キングを自動で動かし、労働を選ぶ"],
+  ["inspect","視察","視察を終える"],
+  ["ally","同盟・覚醒","申請しない"],
+  ["squad","侵略：編成","侵略を取りやめる（遠征コストは返金）"],
+  ["place","侵略：配置（1人ずつ）","侵略を取りやめる（遠征コストは返金）"],
+  ["build","建設","建設を終える"],
+  ["retake","奪還","奪還せずに終える"],
+  ["repair","ターンの終わり（修繕の確認）","修繕しない"]];
+function defaultTimers(){return Object.fromEntries(TIMER_PHASES.map(([k])=>[k,{on:false,sec:60}]))}
+function timerKey(g){
+  if(g.phase==="setup")return "setup";
+  if(g.phase==="inspect")return "inspect";
+  if(g.phase!=="turn")return null;
+  if(g.sub==="invade")return g.invStage==="squad"?"squad":"place";
+  return g.sub;
+}
+function timerSig(g){const k=timerKey(g);if(!k)return null;return k+"|"+g.round+"|"+g.turn+(k==="place"?"|"+JSON.stringify(g.invQ):"")}
+function timerInfo(g){
+  const k=timerKey(g);const st=(g.timers||{})[k];
+  if(!k||!st||!st.on||!g.timerStart||g.timerSig!==timerSig(g))return null;
+  return {key:k,left:Math.max(0,Math.ceil((g.timerStart+st.sec*1000-Date.now())/1000)),sec:st.sec};
+}
+/* 部屋を作った人（と1台モード）の画面で1秒ごとに確認する */
+function timerTick(){
+  const g=S.game;if(!g||(S.mode!=="host"&&S.mode!=="local"))return;
+  g.timers=g.timers||defaultTimers();
+  const sig=timerSig(g);
+  if(sig!==g.timerSig){g.timerSig=sig;g.timerStart=Date.now();if(sig&&(g.timers[timerKey(g)]||{}).on)broadcast();return}
+  const ti=timerInfo(g);if(!ti||ti.left>0)return;
+  const ids=pendingIds(g);if(!ids.length)return;
+  for(const id of ids){const err=safeApply(g,id,null,()=>proxyAct(g,id));
+    if(!err){const p=P_OF(g,id);logP(g,p,`制限時間（${ti.sec}秒）になったので自動で進めました`)}}
+  g.timerSig=null;broadcast();
+}
+setInterval(timerTick,1000);
+/* 残り時間の表示（画面全体を描き直さずに数字だけ更新） */
+setInterval(()=>{const el=document.getElementById("timerbadge");if(!el||!S.timerEnd)return;
+  const left=Math.max(0,Math.ceil((S.timerEnd-Date.now())/1000));el.textContent=`⏱ 残り${left}秒`;el.classList.toggle("warn",left<=10)},500);
+function openSettings(){
+  const d=$("#dlg");const can=S.mode!=="guest";
+  const T=(S.mode==="guest"?(S.view.timers||defaultTimers()):(S.game.timers=S.game.timers||defaultTimers()));
+  d.innerHTML=`<b>⚙ 設定：フェーズの制限時間</b>
+  <div class="sub">オンにしたフェーズは、決めた秒数（5〜300秒）を過ぎると、待っている人を自動で進めます。${can?"":"<br>設定を変えられるのは部屋を作った人だけです。"}</div>
+  <table class="result-t" style="margin-top:8px"><tr><th>フェーズ</th><th>制限</th><th class="n">秒数</th></tr>
+  ${TIMER_PHASES.map(([k,name,what])=>`<tr><td>${esc(name)}<br><small class="sub">時間切れ：${esc(what)}</small></td>
+    <td><label><input type="checkbox" data-ton="${k}" ${T[k]&&T[k].on?"checked":""} ${can?"":"disabled"}> オン</label></td>
+    <td class="n"><input type="number" min="5" max="300" step="5" data-tsec="${k}" value="${T[k]?T[k].sec:60}" style="width:72px" ${can?"":"disabled"}></td></tr>`).join("")}</table>
+  <div class="row" style="margin-top:8px">${can?`<button class="primary" id="tsave">保存</button><button id="tall">全部オン</button><button id="tnone">全部オフ</button>`:""}<button id="dclose">閉じる</button></div>`;
+  d.showModal();$("#dclose").onclick=()=>d.close();
+  if(!can)return;
+  const read=()=>{const o={};for(const [k] of TIMER_PHASES){const on=d.querySelector(`[data-ton="${k}"]`).checked;let sec=Math.round(+d.querySelector(`[data-tsec="${k}"]`).value||60);sec=Math.min(300,Math.max(5,sec));o[k]={on,sec}}return o};
+  $("#tsave").onclick=()=>{S.game.timers=read();S.game.timerSig=null;d.close();toast("制限時間の設定を保存しました");broadcast()};
+  $("#tall").onclick=()=>d.querySelectorAll("[data-ton]").forEach(c=>c.checked=true);
+  $("#tnone").onclick=()=>d.querySelectorAll("[data-ton]").forEach(c=>c.checked=false);
+}
 function localStart(names,rounds){
   S.mode="local";S.code="LOCAL";S.game=newGame();S.game.rounds=rounds||1;
   names.forEach((n,i)=>S.game.players.push(newPlayer("P"+(i+1),n)));
@@ -1315,7 +1381,9 @@ function render(){
   const v=S.view;if(!v){renderTitle();return}
   document.body.classList.remove("titlebg");
   const app=$("#app");
-  let h=`<div class="row"><h1 class="grow">SkyPirates</h1>${v.phase!=="lobby"?`<button id="bcost">📖 コスト表</button><button id="bscore" ${v.scores?"":"disabled title='視察フェーズから見られます'"}>🏆 得点${v.scores?"":"🔒"}</button>`:""}<span class="sub">${S.mode==="local"?"1台モード":"部屋 "+esc(S.code)}</span></div>`;
+  let h=`<div class="row"><h1 class="grow">SkyPirates</h1>${v.phase!=="lobby"?`<button id="bcost">📖 コスト表</button><button id="bscore" ${v.scores?"":"disabled title='視察フェーズから見られます'"}>🏆 得点${v.scores?"":"🔒"}</button>`:""}<button id="bset" title="設定">⚙</button><span class="sub">${S.mode==="local"?"1台モード":"部屋 "+esc(S.code)}</span></div>`;
+  S.timerEnd=v.timer?Date.now()+v.timer.left*1000:null;
+  if(v.timer)h+=`<div class="timerbar"><span id="timerbadge" class="${v.timer.left<=10?"warn":""}">⏱ 残り${v.timer.left}秒</span><small class="sub">このフェーズの制限時間 ${v.timer.sec}秒（時間切れで自動で進みます）</small></div>`;
   if(S.mode==="local"){
     const g=S.game;const doneP=p=>g.phase==="setup"?p.setupDone:g.phase==="inspect"?p.inspectDone:g.phase==="turn"?(g.sub==="prep"?p.ts.stage==="decided":g.sub==="repair"?!!p.ts.repairDone:!(p.ts.action==="build"&&!p.ts.buildDone)):false;
     h+=`<div class="tabs">${g.players.map(p=>`<button class="${p.id===S.seat?"on primary":""}" data-seat="${p.id}">${esc(p.name)}${doneP(p)?" ✓":""}</button>`).join("")}</div>`;
@@ -1419,9 +1487,9 @@ function charsHTML(me){
   return `<div class="panel"><b>空賊基地とキャラ</b>${bs.map(b=>{
     const mine=me.chars.filter(c=>c.base===b.label);
     const list=[...Object.keys(CHARS).filter(k=>k!=="ryuou").map(k=>{const all=mine.filter(c=>c.type===k);if(!all.length)return null;const rest=all.filter(c=>c.restUntil>=t).length;return `${CHARS[k].name}×${all.length}${rest?`（休息${rest}）`:""}`}),
-      ...mine.filter(c=>c.type==="ryuou").map(c=>`竜騎士王（${upText(c.up)}）${c.restUntil>=t?"（休息）":""}`)].filter(Boolean).join("・")||"キャラなし";
+      ...mine.filter(c=>c.type==="ryuou").map(c=>`竜騎士王（${kingLabel(c.up)}）${c.restUntil>=t?"（休息）":""}`)].filter(Boolean).join("・")||"キャラなし";
     const st=b.destroyed?`<b style="color:var(--warn)">破壊されています${b.repairUntil?"（修繕中）":""}。この基地のキャラは使えません</b>`:"";
-    const gen=b.gen?`／<b>${CHARS[b.gen.type].name}を生成中</b>（${b.gen.readyTurn}ターン目に完成${b.gen.up?"・"+upText(b.gen.up):""}）`:b.genPaused?`／${CHARS[b.genPaused.type].name}の生成が止まっています（修繕後に残り${b.genPaused.remaining}ターン）`:"";
+    const gen=b.gen?`／<b>${CHARS[b.gen.type].name}を生成中</b>（${b.gen.readyTurn}ターン目に完成${b.gen.type==="ryuou"?"・"+kingLabel(b.gen.up):""}）`:b.genPaused?`／${CHARS[b.genPaused.type].name}の生成が止まっています（修繕後に残り${b.genPaused.remaining}ターン）`:"";
     return `<div class="sub baserow"><button data-binfo="${esc(b.label)}" class="mini">基地${esc(b.label)}（Lv${b.level}）</button> ${list}${gen} ${st}</div>`}).join("")}
     ${me.chars.some(c=>c.floating)?`<div class="sub" style="color:var(--warn)">浮いているキャラ：${me.chars.filter(c=>c.floating).map(c=>CHARS[c.type].name+"（基地"+c.base+"）").join("・")}（その空賊基地を修繕すると戻ってきます。修繕しない限り戻りません）</div>`:""}
     <div class="sub">基地を押すと、侵略可能・休息中・生成中のキャラを確認できます。</div>
@@ -1442,7 +1510,7 @@ function renderTurn(v){
   const planning=(v.sub==="invade"&&ts.action==="invade"&&!ts.planDone)||(v.sub==="retake"&&ts.action==="retake"&&!ts.planDone);
   if(planning)return h+plannerHTML(v)+logHTML(me);
   if(t>INSPECT_AFTER)h+=`<div class="tabs"><button data-tab="me" class="${S.ui.tab==="me"?"on primary":""}">自分の島</button>${v.others.map(o=>`<button data-tab="${o.id}" class="${S.ui.tab===o.id?"on primary":""}">${esc(o.name)}の島</button>`).join("")}</div>`;
-  if(S.ui.tab!=="me"&&t>INSPECT_AFTER){const o=v.others.find(x=>x.id===S.ui.tab);if(o&&o.board){h+=legendHTML()+boardHTML(o.board,{readonly:true,caption:`${esc(o.name)}の島／ランドマーク：${esc(LM[o.board.landmarkId].name)}${o.board.sealedTurn===t?"／封鎖中":""}`})+kingsInfo(o.board);return h+logHTML(me)}}
+  if(S.ui.tab!=="me"&&t>INSPECT_AFTER){const o=v.others.find(x=>x.id===S.ui.tab);if(o&&o.board){h+=legendHTML()+boardHTML(o.board,{readonly:true,caption:`${esc(o.name)}の島／ランドマーク：${esc(LM[o.board.landmarkId].name)}${o.board.sealedTurn===t?"／封鎖中":""}`})+othersBasesHTML(o.board,o.name);return h+logHTML(me)}}
   let hint="",ctrl="";
   const dl=destroyedList(me);
   const common=`<button id="bsell">💰 売却</button>${dl.length?`<button id="brepair">🔧 修繕</button>`:""}<button id="bundo" ${me.undoCount?"":"disabled"}>↶ 取り消し</button>`;
@@ -1483,9 +1551,9 @@ function baseCharRows(me,label){
   const t=S.view.turn;const b=me.grid.find(x=>x&&x.kind==="base"&&x.label===label);const broken=b&&b.destroyed;
   const rows=[];
   for(const k of Object.keys(CHARS)){const all=me.chars.filter(c=>c.base===label&&c.type===k);if(!all.length)continue;
-    if(k==="ryuou"){all.forEach(c=>rows.push({type:k,label:`竜騎士王（${upText(c.up)}）`,ok:broken?0:c.restUntil<t?1:0,rest:!broken&&c.restUntil>=t?1:0,broken:broken?1:0}));continue}
+    if(k==="ryuou"){all.forEach(c=>rows.push({type:k,label:`竜騎士王（${kingLabel(c.up)}）`,ok:broken?0:c.restUntil<t?1:0,rest:!broken&&c.restUntil>=t?1:0,broken:broken?1:0}));continue}
     const rest=all.filter(c=>c.restUntil>=t).length;rows.push({type:k,label:CHARS[k].name,ok:broken?0:all.length-rest,rest:broken?0:rest,broken:broken?all.length:0})}
-  const gen=b&&b.gen?{label:`${CHARS[b.gen.type].name}${b.gen.up?"（"+upText(b.gen.up)+"）":""}`,ready:b.gen.readyTurn}:b&&b.genPaused?{label:CHARS[b.genPaused.type].name,paused:b.genPaused.remaining}:null;
+  const gen=b&&b.gen?{label:`${CHARS[b.gen.type].name}${b.gen.type==="ryuou"?"（"+kingLabel(b.gen.up)+"）":""}`,ready:b.gen.readyTurn}:b&&b.genPaused?{label:CHARS[b.genPaused.type].name,paused:b.genPaused.remaining}:null;
   return {rows,gen,broken};
 }
 function baseInfoHTML(me,label){
@@ -1493,6 +1561,14 @@ function baseInfoHTML(me,label){
   return `<table><tr><th>キャラ</th><th class="n">侵略可能</th><th class="n">休息中</th>${broken?`<th class="n">使用不可</th>`:""}</tr>${rows.map(r=>`<tr><td>${esc(r.label)}</td><td class="n"><b>${r.ok}</b></td><td class="n">${r.rest}</td>${broken?`<td class="n">${r.broken}</td>`:""}</tr>`).join("")||`<tr><td colspan="3" class="sub">キャラなし</td></tr>`}</table>
   <div class="sub" style="margin-top:4px">生成中：${gen?(gen.paused?`${esc(gen.label)}（基地の修繕待ち・修繕後に残り${gen.paused}ターン）`:`${esc(gen.label)}（${gen.ready}ターン目に完成）`):"なし"}</div>
   ${broken?`<div class="sub" style="color:var(--warn)">この基地は壊されています。修繕が終わるまで、この基地のキャラは使えません。</div>`:""}`;
+}
+/* 他のプレイヤーの空賊基地とキャラ（作成済み・生成中）。島が見えるようになってから表示 */
+function othersBasesHTML(board,name){
+  const bs=board.grid.filter(b=>b&&b.kind==="base");
+  if(!bs.length)return `<div class="panel"><b>${esc(name)}の空賊基地</b><div class="sub">空賊基地はありません</div></div>`;
+  const fl=(board.chars||[]).filter(c=>c.floating).length;
+  return `<div class="panel"><b>${esc(name)}の空賊基地とキャラ</b>${bs.map(b=>`<div style="margin-top:8px"><b>空賊基地${esc(b.label)}</b>（Lv${b.level}${b.destroyed?"・壊されている":""}）${baseInfoHTML(board,b.label)}</div>`).join("")}
+    ${fl?`<div class="sub" style="margin-top:6px">浮いているキャラ：${fl}体（基地が修繕されると戻る）</div>`:""}</div>`;
 }
 function openBaseInfo(label){
   const me=S.view.me;const b=me.grid.find(x=>x&&x.kind==="base"&&x.label===label);const d=$("#dlg");
@@ -1514,7 +1590,7 @@ function squadHTML(v){
   <div class="genbox">${broken?`<div class="sub" style="color:var(--warn)">この基地は壊されているため、キャラを出せません</div>`:""}
   ${rows.filter(r=>r.type!=="ryuou").map(r=>{const key=Q.base+"|"+r.type;const n=Q.sel[key]||0;const capT=r.type==="tenshou"?3-typeTot("tenshou")+n:99;const max=Math.min(r.ok,capT);
     return `<div class="row stepper"><span class="grow">${esc(r.label)}<small class="sub">（侵略可能${r.ok}・休息中${r.rest}）</small></span><button data-sq="${esc(key)}|-1" ${n<=0?"disabled":""}>－</button><b>${n}</b><button data-sq="${esc(key)}|1" ${n>=max||tot>=me.maxUnits?"disabled":""}>＋</button></div>`}).join("")}
-  ${me.kingsUsable.filter(k=>k.base===Q.base).map(k=>{const on=Q.kings.includes(k.id);return `<div class="row stepper"><span class="grow">竜騎士王<small class="sub">（${esc(upText(k.up))}／${1+((k.up&&k.up.houkou)||0)}連撃）</small></span><button data-sqk="${k.id}" class="${on?"on primary":""}" ${!on&&tot>=me.maxUnits?"disabled":""}>${on?"出す":"出さない"}</button></div>`}).join("")}
+  ${me.kingsUsable.filter(k=>k.base===Q.base).map(k=>{const on=Q.kings.includes(k.id);return `<div class="row stepper"><span class="grow">竜騎士王<small class="sub">（${esc(kingLabel(k.up))}）</small></span><button data-sqk="${k.id}" class="${on?"on primary":""}" ${!on&&tot>=me.maxUnits?"disabled":""}>${on?"出す":"出さない"}</button></div>`}).join("")}
   ${me.chars.some(c=>c.base===Q.base&&c.type==="ryuou"&&!me.kingsUsable.some(k=>k.id===c.id))?`<div class="sub">休息中の竜騎士王は出せません</div>`:""}
   <div class="sub">生成中：${gen?(gen.paused?`${esc(gen.label)}（修繕待ち）`:`${esc(gen.label)}（${gen.ready}ターン目に完成）`):"なし"}</div></div>
   <div class="sub">編成：${esc(squadText({sel:Q.sel,kings:Q.kings}))}</div>
@@ -1543,7 +1619,7 @@ function plannerHTML(v){
   const kingLeft=kingPool.filter(k=>!P.units.some(u=>u.type==="ryuou"&&u.id===k.id));
   const roster=(Object.keys(pool).sort().map(k=>{const [bl,ty]=k.split("|");const dis=full||left(k)<=0;
     return `<button data-pick="${esc(k)}" class="${P.pick===k?"on primary":""}" ${dis?"disabled":""}>${CHARS[ty].name}<small>基地${esc(bl)}・残り${Math.max(0,left(k))}</small></button>`}).join("")+
-    kingLeft.map(k=>`<button data-pick="ryuou:${k.id}" class="${P.pick==="ryuou:"+k.id?"on primary":""}" ${full?"disabled":""}>竜騎士王（基地${esc(k.base)}）<small>${esc(upText(k.up))}</small></button>`).join(""))||(P.units.length?`<div class="sub">編成したキャラを全員配置しました。下の「確定」を押してください</div>`:`<div class="sub">出撃できるキャラがいません</div>`);
+    kingLeft.map(k=>`<button data-pick="ryuou:${k.id}" class="${P.pick==="ryuou:"+k.id?"on primary":""}" ${full?"disabled":""}>竜騎士王（基地${esc(k.base)}）<small>${esc(kingLabel(k.up))}</small></button>`).join(""))||(P.units.length?`<div class="sub">編成したキャラを全員配置しました。下の「確定」を押してください</div>`:`<div class="sub">出撃できるキャラがいません</div>`);
   const cnt={};const range=new Set();const add=(i,x)=>{cnt[i]=cnt[i]||{};cnt[i][x]=(cnt[i][x]||0)+1};
   const tenCells=new Set();
   P.units.forEach(u=>{const i=idx(u.r,u.c);
@@ -1574,7 +1650,7 @@ function plannerHTML(v){
     <div class="acts">${roster}</div>
     <div class="hint">${P.pick?how[P.pick]:"出すキャラ（基地）を選んでから、盤面のマスをタップしてください。"}</div></div>`;
   h+=legendHTML()+boardHTML(isl,{targets:tg,marks,range,caption:`${mode==="invade"?"侵略先（今の状態）":"自分の島"}／オレンジ枠＝竜騎士の攻撃範囲`});
-  h+=`<div class="panel"><b>配置</b>${P.units.length?`<div class="plist">${P.units.map((u,k)=>`<div class="row"><span class="grow">${CHARS[u.type].name}${u.type==="ryuou"?"#"+u.id:"（基地"+esc(u.base)+"）"}：${sq(u.r,u.c)}${u.type==="tenshou"?"＋"+sq(u.r2,u.c2):""}</span><button data-unrm="${k}">外す</button></div>`).join("")}</div>`:`<div class="sub">まだ配置していません</div>`}
+  h+=`<div class="panel"><b>配置</b>${P.units.length?`<div class="plist">${P.units.map((u,k)=>`<div class="row"><span class="grow">${CHARS[u.type].name}${u.type==="ryuou"?"（"+esc(kingStat((me.chars.find(c=>c.id===u.id)||{}).up))+"）":"（基地"+esc(u.base)+"）"}：${sq(u.r,u.c)}${u.type==="tenshou"?"＋"+sq(u.r2,u.c2):""}</span><button data-unrm="${k}">外す</button></div>`).join("")}</div>`:`<div class="sub">まだ配置していません</div>`}
     <div class="row" style="margin-top:8px"><button class="primary grow" id="bplan" ${allPlaced?"":"disabled"}>${mode==="invade"?"侵略":"奪還"}を確定</button><button id="bplanclr">全部外す</button></div>
     ${mode==="retake"?`<div class="row" style="margin-top:6px"><button class="grow" id="bplanskip">奪還せずに終える${P.units.length?"（配置したキャラは出さない）":""}</button></div>`:""}</div>`;
   return h;
@@ -1602,7 +1678,7 @@ function genPanel(me){
     const done=me.ts.genBases.includes(i);let inner;
     if(b.destroyed)inner=`<div class="sub">破壊されています（修繕すると生成できます）</div>`;
     else if(b.gen&&b.gen.type==="ryuou"){const up=b.gen.up;const n=up.houkou+up.shinsou+up.kamui;const doneT=b.gen.upTurn===S.view.turn;
-      inner=`<div class="sub">竜騎士王を生成中（${b.gen.readyTurn}ターン目に完成）。強化 ${n}/3：${esc(upText(up))}${doneT?"／このターンは強化済み":""}</div>
+      inner=`<div class="sub">竜騎士王を生成中（${b.gen.readyTurn}ターン目に完成）。強化 ${n}/3：${esc(kingLabel(up))}${doneT?"／このターンは強化済み":""}</div>
       <div class="acts">${Object.entries(STRENGTH).map(([k,st])=>{const lim=k==="kamui"?up.kamui>=1:up[k]>=3;const ok=!doneT&&n<3&&!lim&&canAfford(me,{money:0,res:st.res});
         return `<button class="${ok?"can":""}" data-str="${i}|${k}" ${ok?"":"disabled"}>${esc(st.name.replace("（竜騎士王の強化）",""))}<small>${resText(st.res)}／${esc(st.eff)}</small></button>`}).join("")}</div>`}
     else if(b.gen)inner=`<div class="sub">${CHARS[b.gen.type].name}を生成中（${b.gen.readyTurn}ターン目に完成）。生成中は次のキャラを作れません。</div>`;
@@ -1619,7 +1695,7 @@ function renderInspect(v){
   <div class="sub">${v.others.map(o=>esc(o.name)+(o.inspectDone?" ✓":" …")).join("／")}</div></div>`;
   h+=`<div class="tabs"><button data-tab="me" class="${S.ui.tab==="me"?"on primary":""}">自分の島</button>${v.others.map(o=>`<button data-tab="${o.id}" class="${S.ui.tab===o.id?"on primary":""}">${esc(o.name)}の島</button>`).join("")}</div>`;
   if(S.ui.tab==="me")h+=boardHTML(me,{readonly:true});
-  else{const o=v.others.find(x=>x.id===S.ui.tab);if(o&&o.board)h+=boardHTML(o.board,{readonly:true,caption:`${esc(o.name)}の島／ランドマーク：${esc(LM[o.board.landmarkId].name)}`})}
+  else{const o=v.others.find(x=>x.id===S.ui.tab);if(o&&o.board)h+=boardHTML(o.board,{readonly:true,caption:`${esc(o.name)}の島／ランドマーク：${esc(LM[o.board.landmarkId].name)}`})+othersBasesHTML(o.board,o.name)}
   h+=`<div class="panel">${me.inspectDone?"視察終了済み。他の人を待っています。":`<button class="primary" id="binsp">視察終了</button>`}</div>`;
   return h;
 }
@@ -1657,7 +1733,7 @@ function downloadCSV(){
 }
 function kingsInfo(bd){
   if(!bd||(!bd.kings.length&&!bd.gens.length))return "";
-  return `<div class="hint">竜騎士王：${[...bd.kings.map(k=>`基地${esc(k.base)}（${esc(upText(k.up))}）`),...bd.gens.map(k=>`基地${esc(k.label)}で生成中（${esc(upText(k.up))}・${k.readyTurn}ターン目に完成）`)].join("／")}</div>`;
+  return `<div class="hint">竜騎士王：${[...bd.kings.map(k=>`基地${esc(k.base)}（${esc(kingLabel(k.up))}）`),...bd.gens.map(k=>`基地${esc(k.label)}で生成中（${esc(kingLabel(k.up))}・${k.readyTurn}ターン目に完成）`)].join("／")}</div>`;
 }
 function allyPanel(v){
   const A=v.ally;if(!A)return "";
@@ -1802,6 +1878,7 @@ function bind(){
   on("bstart",()=>{startSetup(S.game);broadcast()});
   on("bcost",()=>openCost(null));
   on("bscore",()=>openScores());
+  on("bset",()=>openSettings());
   on("bstay",()=>doAct({kind:"stay"}));
   on("bgennext",()=>doAct({kind:"genNext"}));
   on("bundecide",()=>doAct({kind:"undecide"}));
