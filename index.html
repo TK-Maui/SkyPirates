@@ -119,7 +119,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v0.9.4（2026/10/7版：編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v0.9.5（2026/10/7版：同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -220,7 +220,8 @@ function hasLM(p,id){const l=landmarkBuilt(p);return !!l&&!l.destroyed&&l.lm===i
 function isLv4(b){return (b.kind==="base"&&b.level>=4)||(b.kind==="fac"&&b.lv4)}
 function baseCap(p){return p.boosted?4:3}
 /* 同盟・覚醒後はラダーが1段ずり上がる：Lv L→L+1 のコストは、元の Lv(L-1)→L のコスト */
-function baseUpCost(p,b){return p.boosted?BASE_UP[b.level]:BASE_UP[b.level+1]}
+/* 同盟・覚醒後はラダーが1段ずり上がる（Lv2→3が同盟前のLv1→2と同じ）。万一Lv1の基地があれば通常のコスト */
+function baseUpCost(p,b){return (p.boosted&&BASE_UP[b.level])||BASE_UP[b.level+1]||BASE_UP[3]}
 function refreshLv4(p,t){p.grid.forEach(b=>{if(b&&b.kind==="fac")b.lv4=!!(b.opened&&b.ally&&facLevel(b,t)>=4)})}
 function durability(p,i){const b=p.grid[i];let m=b.kind==="landmark"?5:isLv4(b)?5:3;if(hasLM(p,"jousai"))m+=2;return m}
 function baseByLabel(p,l){return p.grid.find(b=>b&&b.kind==="base"&&b.label===l)}
@@ -407,13 +408,15 @@ const LV_START={1:0,2:2,3:5};
 function startTurn(g,t){
   g.turn=t;g.phase="turn";g.sub="prep";
   for(const p of g.players){
+    // 同盟・覚醒後の空賊基地はLv2が最低（修繕でLv1に下がっていた古いデータも直す）
+    if(p.boosted)p.grid.forEach(b=>{if(b&&b.kind==="base"&&b.level<2)b.level=2});
     // 修繕の完了
     p.grid.forEach((b,i)=>{
       if(!b||!b.destroyed||!b.repairUntil||b.repairUntil>t)return;
       b.destroyed=false;delete b.repairUntil;p.dmg[i]=0;p.hits[i]=null;
       const retook=p.owner[i]!==p.id||p.flags[i];p.owner[i]=p.id;p.flags[i]=null;
       if(b.kind==="fac"&&b.opened){const nl=Math.max(1,(b.lvAtDestroy||1)-1);b.openedTurn=t-LV_START[b.ally?Math.max(1,nl-1):Math.min(3,nl)];delete b.lvAtDestroy}
-      if(b.kind==="base"){landFloating(g,p,b.label);b.level=Math.max(1,b.level-1);if(b.genPaused){b.gen={type:b.genPaused.type,readyTurn:t+b.genPaused.remaining,up:b.genPaused.up||null,upTurn:null};delete b.genPaused}}
+      if(b.kind==="base"){landFloating(g,p,b.label);b.level=Math.max(p.boosted?2:1,b.level-1);if(b.genPaused){b.gen={type:b.genPaused.type,readyTurn:t+b.genPaused.remaining,up:b.genPaused.up||null,upTurn:null};delete b.genPaused}}
       if(b.kind==="landmark")b.builtTurn=t-1;
       logP(g,p,`${bName(b)}(${sq(Math.floor(i/8),i%8)})の修繕が完了${retook?"（領土が戻り、旗も消えた）":""}`);
     });
@@ -1668,6 +1671,7 @@ function allyPanel(v){
   }
   return `<div class="panel">${head}<div class="sub">選びました。他の申請者を待っています。</div></div>`;
 }
+window.addEventListener("error",e=>{try{toast("画面のエラー："+(e.message||"不明"))}catch(x){}});
 function openBuildMenu(){
   const me=S.view.me;const d=$("#dlg");
   const items=[...Object.keys(BUILD),"landmark"].map(w=>{
