@@ -122,7 +122,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v0.9.7（2026/10/7版：フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v0.9.8（2026/10/7版：同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -155,7 +155,7 @@ const CHARS = {
   tenshou:{name:"天翔使い",lv:1,time:0,res:{hane:3,mizu:3},eff:"選んだマスと隣の計2マスを自分の領土に（侵略時は3体まで）"},
   kuzoku:{name:"空賊",lv:2,time:0,res:{kumo:5,kome:5},eff:"自分の領土のマスに旗を1本立てる"},
   ryukishi:{name:"竜騎士",lv:3,time:1,res:{taku:7,hane:10,kumo:10,kome:10,mizu:10},eff:"攻撃範囲5マスに単発"},
-  ryuou:{name:"竜騎士王",lv:4,time:3,res:{ishi:5,kome:10,mizu:10},eff:"初期は竜騎士と同じ。生成中に強化して育てる（同盟・覚醒が必要）"},
+  ryuou:{name:"竜騎士王",lv:4,time:3,res:{ishi:5,kome:10,mizu:10},eff:"初期は竜騎士と同じ。生成中に強化して育てる（空賊基地Lv4が必要。覚醒した人は11ターン目から、それ以外は2ラウンド目の14ターン目から）"},
 };
 const STRENGTH = {
   houkou:{name:"咆哮（竜騎士王の強化）",res:{ishi:7,taku:7},eff:"攻撃回数+1（3回まで）"},
@@ -221,10 +221,14 @@ const P_OF=(g,id)=>g.players.find(q=>q.id===id);
 function alive(b){return !!b&&!b.destroyed}
 function hasLM(p,id){const l=landmarkBuilt(p);return !!l&&!l.destroyed&&l.lm===id}
 function isLv4(b){return (b.kind==="base"&&b.level>=4)||(b.kind==="fac"&&b.lv4)}
-function baseCap(p){return p.boosted?4:3}
+/* 空賊基地のレベル上限：覚醒した人はLv4。覚醒していない人も「2ラウンド目の14ターン目から」Lv4にできる（Lv4の解放） */
+const LV4_OPEN_TURN=14;
+const LV4_OPEN_COST={money:3000,res:{ishi:20,taku:20,kumo:10,hane:10}};
+function lv4Open(g){return !!g&&g.round===2&&g.turn>=LV4_OPEN_TURN}
+function baseCap(p,g){return p.boosted||lv4Open(g)?4:3}
 /* 同盟・覚醒後はラダーが1段ずり上がる：Lv L→L+1 のコストは、元の Lv(L-1)→L のコスト */
 /* 同盟・覚醒後はラダーが1段ずり上がる（Lv2→3が同盟前のLv1→2と同じ）。万一Lv1の基地があれば通常のコスト */
-function baseUpCost(p,b){return (p.boosted&&BASE_UP[b.level])||BASE_UP[b.level+1]||BASE_UP[3]}
+function baseUpCost(p,b){if(p.boosted)return BASE_UP[b.level]||BASE_UP[b.level+1]||BASE_UP[3];return b.level>=3?LV4_OPEN_COST:BASE_UP[b.level+1]}
 function refreshLv4(p,t){p.grid.forEach(b=>{if(b&&b.kind==="fac")b.lv4=!!(b.opened&&b.ally&&facLevel(b,t)>=4)})}
 function durability(p,i){const b=p.grid[i];let m=b.kind==="landmark"?5:isLv4(b)?5:3;if(hasLM(p,"jousai"))m+=2;return m}
 function baseByLabel(p,l){return p.grid.find(b=>b&&b.kind==="base"&&b.label===l)}
@@ -274,16 +278,15 @@ function applyBoost(g,p,kind){
 function formAlly(g,a,b){const A=P_OF(g,a),B=P_OF(g,b);A.allyWith=b;B.allyWith=a;applyBoost(g,A,"ally");applyBoost(g,B,"ally");
   g.players.forEach(p=>{if(p.id!==a&&p.id!==b)logP(g,p,`${A.name}と${B.name}が同盟を結びました`)});logG(g,`同盟：${A.name}×${B.name}`)}
 function startAllyPhase(g){
-  if(!g.r1||g.players.length<3){g.players.forEach(p=>logP(g,p,"同盟・覚醒フェーズ：2人プレイのため発生しません"));return}
+  if(!g.r1||g.players.length<3){g.players.forEach(p=>logP(g,p,"覚醒：2人プレイのため発生しません"));return}
   const rank=r1Rank(g);const max=g.r1[rank[0]].total;
   const q=rank.filter(id=>max-g.r1[id].total>=30);
-  if(!q.length){g.players.forEach(p=>logP(g,p,"同盟・覚醒フェーズ：1ラウンド目に最高得点から30点以上離れた人がいないため、発生しません"));return}
-  if(q.length===1){const p=P_OF(g,q[0]);applyBoost(g,p,"awaken");g.players.forEach(x=>{if(x.id!==p.id)logP(g,x,`${p.name}が覚醒しました`)});return}
-  const low=[...q].reverse();
-  g.ally=g.players.length<=4?{mode:"single",applicants:[low[0]],first:rank[0],step:"pick",answers:{},picks:{}}
-                            :{mode:"double",applicants:[low[0],low[1]],first:rank[0],step:"mutual",answers:{},picks:{}};
-  g.sub="ally";
-  g.players.forEach(p=>logP(g,p,`同盟フェーズ：申請できるのは ${g.ally.applicants.map(id=>P_OF(g,id).name).join("・")}`));
+  if(!q.length){g.players.forEach(p=>logP(g,p,"覚醒：1ラウンド目に最高得点から30点以上離れた人がいないため、発生しません"));return}
+  // 同盟は廃止。該当者の中から下位の人が覚醒する（3〜4人プレイは最下位1人、5〜6人プレイは下位2人まで）
+  const n=g.players.length>=5?2:1;const low=[...q].reverse().slice(0,n);
+  low.forEach(id=>{const p=P_OF(g,id);applyBoost(g,p,"awaken");g.players.forEach(x=>{if(x.id!==p.id)logP(g,x,`${p.name}が覚醒しました`)})});
+  const left=q.filter(id=>!low.includes(id));
+  if(left.length)left.forEach(id=>logP(g,P_OF(g,id),`覚醒できるのは${n===1?"最下位の1人":"下位2人"}までのため、覚醒しませんでした`));
 }
 function allyCands(g,pid){
   const A=g.ally;const ex=new Set([A.first,pid]);
@@ -678,7 +681,7 @@ function applyAction(g,pid,a){
         const b=p.grid[idx(a.r,a.c)];
         if(!b||b.kind!=="base")return "空賊基地ではありません";
         if(b.destroyed)return "壊された基地はレベルアップできません（先に修繕）";
-        if(b.level>=baseCap(p))return p.boosted?"上限のLv4です":"同盟・覚醒なしの上限はLv3です";
+        if(b.level>=baseCap(p,g))return b.level>=4?"上限のLv4です":`覚醒していない人がLv4にできるのは、2ラウンド目の${LV4_OPEN_TURN}ターン目からです`;
         const cost=baseUpCost(p,b);
         if(!canAfford(p,cost))return `足りません：${lackText(p,cost)}`;
         snap(p);pay(p,cost);b.level++;
@@ -951,8 +954,8 @@ function makeRecord(g,p){
     sold:st.sold,lostRes:st.lost,genT:st.gen.tenshou||0,genK:st.gen.kuzoku||0,genR:st.gen.ryukishi||0,genO:st.gen.ryuou||0,
     upH:st.up.houkou,upS:st.up.shinsou,upK:st.up.kamui,skipped:st.skipped};
 }
-const REC_COLS=[["round","ラウンド"],["name","名前"],["total","合計点"],["territory","領土点"],["away","他の島の領土(マス)"],["flags","旗(本)"],["buildings","建設物点"],["posBonus","うち位置ボーナス"],["destroy","破壊・瀕死点"],["moneyPts","所持金点"],["allyPts","同盟・覚醒の減点"],
-  ["landmark","ランドマーク"],["lmTurn","LM建設ターン"],["ally","同盟・覚醒"],["labor","労働(回)"],["build","建設(回)"],["invade","侵略(回)"],["retake","奪還(回)"],["seq","アクション順"],
+const REC_COLS=[["round","ラウンド"],["name","名前"],["total","合計点"],["territory","領土点"],["away","他の島の領土(マス)"],["flags","旗(本)"],["buildings","建設物点"],["posBonus","うち位置ボーナス"],["destroy","破壊・瀕死点"],["moneyPts","所持金点"],["allyPts","覚醒の減点"],
+  ["landmark","ランドマーク"],["lmTurn","LM建設ターン"],["ally","覚醒"],["labor","労働(回)"],["build","建設(回)"],["invade","侵略(回)"],["retake","奪還(回)"],["seq","アクション順"],
   ["laborMoney","労働収入"],["kingMoney","キングの建物収入"],["moneyEnd","最終所持金"],["destroyB","建物破壊"],["destroyL","LM破壊"],["kills","瀕死にした"],["downed","瀕死にされた"],["lostB","壊された建物"],["repairs","修繕"],
   ["sold","売却(個)"],["lostRes","消滅資材(個)"],["genT","天翔使い生成"],["genK","空賊生成"],["genR","竜騎士生成"],["genO","竜騎士王生成"],["upH","咆哮"],["upS","伸槍"],["upK","神威"],["skipped","代行された回数"]];
 function islandView(p){return {id:p.id,name:p.name,grid:p.grid,chars:p.chars.map(c=>({id:c.id,type:c.type,base:c.base,restUntil:c.restUntil,up:c.up||null,floating:!!c.floating})),owner:p.owner,flags:p.flags,dmg:p.dmg,king:p.king,kingDmg:p.kingDmg,kingDownTurn:p.kingDownTurn,landmarkId:p.landmarkId,sealedTurn:p.sealedTurn,
@@ -979,7 +982,7 @@ function viewFor(g,pid){
     lobby:g.players.map(p=>({id:p.id,name:p.name,connected:p.connected}))};
 }
 function publicSelf(p,g){const o=clone(p);delete o.token;o.undoCount=p.undo.length;delete o.undo;o.cap=cap(p);o.supply=moneySupply(p,g.turn);o.laborBase=laborBase(p,g.turn);o.score=score(g,p);
-  o.usable=usableCount(p,g.turn);o.usableBB=usableByBase(p,g.turn);o.maxUnits=maxUnits(p);o.hasAltar=hasLM(p,"saidan");o.baseCap=baseCap(p);
+  o.usable=usableCount(p,g.turn);o.usableBB=usableByBase(p,g.turn);o.maxUnits=maxUnits(p);o.hasAltar=hasLM(p,"saidan");o.baseCap=baseCap(p,g);
   o.kingsUsable=p.chars.filter(c=>c.type==="ryuou"&&charUsable(p,c,g.turn)).map(c=>({id:c.id,base:c.base,up:c.up}));return o}
 
 /* ================= 通信 ================= */
@@ -1272,7 +1275,6 @@ const TIMER_PHASES=[
   ["setup","キングの配置（ゲーム開始時）","8列目のどこかに自動で置く"],
   ["prep","支給〜アクション選択（キング移動・キャラ生成・アクション）","キングを自動で動かし、労働を選ぶ"],
   ["inspect","視察","視察を終える"],
-  ["ally","同盟・覚醒","申請しない"],
   ["squad","侵略：編成","侵略を取りやめる（遠征コストは返金）"],
   ["place","侵略：配置（1人ずつ）","侵略を取りやめる（遠征コストは返金）"],
   ["build","建設","建設を終える"],
@@ -1415,7 +1417,7 @@ function renderLobby(v){
   if(S.mode==="host")h+=`<div>部屋番号 <b style="font-size:22px;letter-spacing:2px">${esc(S.code)}</b></div>
     <div class="sub">友達にはこのリンクを送ってください</div><div class="row"><input readonly value="${esc(url)}" class="grow" id="shareurl"><button id="bcopy">コピー</button></div>`;
   h+=`<ul>${v.lobby.map(p=>`<li>${esc(p.name)}${p.id===S.seat?"（あなた）":""}${p.connected?"":" <span class='pill'>切断中</span>"}</li>`).join("")}</ul>`;
-  h+=`<div class="row" style="margin:8px 0"><span>ラウンド数：</span>${S.mode==="host"?[1,2].map(n=>`<button data-rounds="${n}" class="${v.rounds===n?"on primary":""}">${n}ラウンド</button>`).join(""):`<b>${v.rounds}ラウンド</b>`}</div><div class="sub">2ラウンド制では、2ラウンド目の11ターン目に同盟・覚醒が発生することがあります。</div>`;
+  h+=`<div class="row" style="margin:8px 0"><span>ラウンド数：</span>${S.mode==="host"?[1,2].map(n=>`<button data-rounds="${n}" class="${v.rounds===n?"on primary":""}">${n}ラウンド</button>`).join(""):`<b>${v.rounds}ラウンド</b>`}</div><div class="sub">2ラウンド制では、2ラウンド目の11ターン目に覚醒が発生することがあり、覚醒していない人も14ターン目から空賊基地をLv4にできます。</div>`;
   if(S.mode==="host")h+=`<button class="primary" id="bstart" ${v.lobby.length<2?"disabled":""}>この${v.lobby.length}人で始める</button><div class="sub">2〜6人で始められます</div>`;
   else h+=`<div class="sub">部屋を作った人が開始するまでお待ちください。</div>`;
   return h+`</div>`;
@@ -1499,7 +1501,7 @@ function destroyedList(me){return me.grid.map((b,i)=>b&&b.destroyed&&b.kind!=="m
 function renderTurn(v){
   const me=v.me;const t=v.turn;const ts=me.ts;
   const planKey=t+"|"+v.sub;if(S.ui.planKey!==planKey){S.ui.planKey=planKey;S.ui.plan={target:null,units:[],pick:null,first:null};S.ui.squad=null}
-  const allyPill=me.boosted?`<span class="pill ok">${me.awakened?"覚醒":"同盟："+esc(pname(me.allyWith))}</span>`:"";
+  const allyPill=me.boosted?`<span class="pill ok">${me.awakened?"覚醒":"同盟："+esc(pname(me.allyWith))}</span>`:(me.baseCap>=4?`<span class="pill">空賊基地Lv4解放</span>`:"");
   let h=`<div class="panel"><div class="row"><b class="grow">${v.rounds===2?`${v.round}R・`:""}ターン ${t} / ${TOTAL_TURNS}</b>${allyPill}${me.sealedTurn===t?`<span class="pill" style="color:var(--warn);border-color:var(--warn)">封鎖中</span>`:""}<span class="pill">${t<=INSPECT_AFTER?"前半":"後半"}</span></div>
   ${stepsHTML(v)}
   <div class="sub">あなたのランドマーク：<b>${esc(myLm(me).name)}</b>（${esc(myLm(me).cond==="なし"?"条件なし":"条件："+myLm(me).cond)}）${me.kingDmg?`／キングへの攻撃 <b>${me.kingDmg}/7</b>`:""}</div>
@@ -1707,7 +1709,7 @@ function renderResult(v){
   let h=`<div class="panel"><h2 style="margin-top:0">${mid?"1ラウンド目終了（中間発表）":fin2?"最終結果（2ラウンド合計）":"ラウンド終了"}</h2><div style="overflow-x:auto"><table class="result-t"><tr><th>順位</th><th>名前</th>${fin2?`<th class="n">合計</th><th class="n">1R</th>`:""}<th class="n">${fin2?"2R":"合計"}</th><th class="n">領土</th><th class="n">旗</th><th class="n">建設物</th><th class="n">破壊・瀕死</th><th class="n">所持金</th><th class="n">同盟</th></tr>
   ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td>${fin2?`<td class="n"><b>${tot(r)}</b></td><td class="n">${v.r1[r.id]?v.r1[r.id].total:"-"}</td>`:""}<td class="n"><b>${r.s.total}</b></td><td class="n">${r.s.territory}</td><td class="n">${r.s.flagPts}</td><td class="n">${r.s.buildings}</td><td class="n">${r.s.destroy}</td><td class="n">${r.s.money}</td><td class="n">${r.s.ally||0}</td></tr>`).join("")}</table></div>`;
   if(mid){const top=Math.max(...all.map(r=>r.s.total));const q=all.filter(r=>top-r.s.total>=30);
-    h+=`<div class="hint">2ラウンド目の11ターン目：${all.length<3?"2人プレイのため同盟・覚醒は発生しません":q.length===0?"最高得点から30点以上離れた人がいないため、同盟・覚醒は発生しません":q.length===1?`<b>${esc(q[0].name)}</b>が<b>覚醒</b>します`:`<b>同盟</b>フェーズが発生します（該当：${q.map(r=>esc(r.name)).join("・")}）`}</div>`;
+    h+=`<div class="hint">2ラウンド目の11ターン目：${all.length<3?"2人プレイのため覚醒は発生しません":q.length===0?"最高得点から30点以上離れた人がいないため、覚醒は発生しません":(()=>{const n=all.length>=5?2:1;const aw=[...q].sort((a,b)=>a.s.total-b.s.total).slice(0,n);return `<b>${aw.map(r=>esc(r.name)).join("・")}</b>が<b>覚醒</b>します（${n===1?"最下位の1人":"下位2人"}まで・同点のときは順位決定のルールで決まります）`})()}<br>覚醒していない人も、2ラウンド目の${LV4_OPEN_TURN}ターン目から空賊基地をLv4にできます（竜騎士王が作れる）</div>`;
     h+=S.mode!=="guest"?`<button class="primary" id="bnext">2ラウンド目を始める</button><div class="sub">建物・領土・お金・資材・キャラは引き継がず、ランドマークも抽選し直します。開始時の所持金は2,500マリーです。</div>`:`<div class="sub">部屋を作った人が2ラウンド目を始めるまでお待ちください。</div>`}
   h+=`</div>`;
   h+=recordsHTML(v);
@@ -1811,7 +1813,7 @@ function openScores(){
   const rows=v.scores.map(s=>({...s,sum:(r2&&v.r1[s.id]?v.r1[s.id].total:0)+s.total})).sort((a,b)=>(r2?b.sum-a.sum:b.total-a.total));
   d.innerHTML=`<b>現在の得点（${v.round}ラウンド目・${v.phase==="inspect"?"視察フェーズ":v.turn+"ターン目"}）</b>
   <div class="sub">今の盤面で計算した得点です（ゲーム終了時の得点とは変わります）。</div>
-  <div style="overflow-x:auto"><table class="result-t"><tr><th>順位</th><th>名前</th>${r2?"<th>合計</th><th>1R</th>":""}<th>${r2?"2R":"得点"}</th><th>領土</th><th>旗</th><th>建設物</th><th>破壊・瀕死</th><th>所持金</th><th>同盟・覚醒</th></tr>
+  <div style="overflow-x:auto"><table class="result-t"><tr><th>順位</th><th>名前</th>${r2?"<th>合計</th><th>1R</th>":""}<th>${r2?"2R":"得点"}</th><th>領土</th><th>旗</th><th>建設物</th><th>破壊・瀕死</th><th>所持金</th><th>覚醒</th></tr>
   ${rows.map((r,i)=>`<tr${r.id===(v.me&&v.me.id)?' style="font-weight:bold"':""}><td>${i+1}</td><td>${esc(r.name)}</td>${r2?`<td class="n"><b>${r.sum}</b></td><td class="n">${v.r1[r.id]?v.r1[r.id].total:"-"}</td>`:""}<td class="n"><b>${r.total}</b></td><td class="n">${r.territory}</td><td class="n">${r.flagPts}</td><td class="n">${r.buildings}</td><td class="n">${r.destroy}</td><td class="n">${r.money}</td><td class="n">${r.ally||0}</td></tr>`).join("")}</table></div>
   <div class="row" style="margin-top:8px"><button id="dclose">閉じる</button></div>`;
   d.showModal();$("#dclose").onclick=()=>d.close();
@@ -1834,7 +1836,8 @@ function openCost(tab){
     body+=row("空賊基地 Lv1",BUILD.base,"天翔使いが作れる／2点／耐久3回");
     body+=row("空賊基地 Lv1→Lv2",BASE_UP[2],"空賊が作れる");
     body+=row("空賊基地 Lv2→Lv3",BASE_UP[3],"竜騎士が作れる");
-    body+=row("空賊基地 Lv3→Lv4（同盟・覚醒後）",BASE_UP[3],"竜騎士王が作れる／毎ターン+300マリー／耐久5回。同盟・覚醒後はレベルアップのコストが1段ずり上がる（Lv2→3は石8・タク8、Lv3→4は石12・タク12・雲10）",!!(me&&me.boosted));
+    body+=row(`空賊基地 Lv3→Lv4（覚醒していない人・2ラウンド目の${LV4_OPEN_TURN}ターン目から）`,LV4_OPEN_COST,"竜騎士王が作れる／毎ターン+300マリー／耐久5回",!!(me&&!me.boosted&&me.baseCap>=4));
+    body+=row("空賊基地 Lv3→Lv4（覚醒した人）",BASE_UP[3],"竜騎士王が作れる／毎ターン+300マリー／耐久5回。覚醒後はレベルアップのコストが1段ずり上がる（Lv2→3は石8・タク8、Lv3→4は石12・タク12・雲10）",!!(me&&me.boosted));
     body+=row("資材倉庫",BUILD.warehouse,"資材の上限 +10個／2点／耐久3回");
     body+=row(MARKET_REBUILD.name+"（建設）",MARKET_REBUILD,MARKET_REBUILD.eff,!!(me&&me.marketLost&&!me.grid.some(b=>b&&b.kind==="market")));
     body+=`<div class="hint">建物の得点には、建てたマスの位置ボーナスが上乗せされます：外側0点／1つ内側+1点／2つ内側+2点／中央4マス+3点（盤面の「+数字」）。ランドマーク・資材倉庫・売却所も対象。旗は対象外</div>`;
