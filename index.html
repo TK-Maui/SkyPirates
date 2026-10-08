@@ -122,7 +122,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v0.9.8（2026/10/7版：同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v0.9.9（2026/10/8版：キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -657,7 +657,7 @@ function applyAction(g,pid,a){
       case "build":{
         const {r,c,what}=a;const i=idx(r,c);
         if(p.grid[i])return "そこには建物があります";
-        if(p.king.r===r&&p.king.c===c)return "キングのいるマスには建てられません";
+        // キングのいるマスにも建てられる（建てても、キングが建物に止まったボーナスはない。ボーナスは移動して止まったときだけ）
         if(p.owner[i]!==p.id||p.flags[i])return "自分の領土にしか建てられません";
         if(noBuildSq(r,c))return "1列目に建てられるのはA・B・G・Hの4マスだけです";
         let cost,b,label;
@@ -1545,7 +1545,7 @@ function renderTurn(v){
 function validTargets(me){
   const t=new Set();
   if(S.view.sub==="prep"&&me.ts.stage==="move")kingMoves(me).forEach(i=>t.add(i));
-  if(S.ui.mode==="build"){for(let i=0;i<64;i++){const r=Math.floor(i/8),c=i%8;if(!me.grid[i]&&me.owner[i]===me.id&&!me.flags[i]&&!(me.king.r===r&&me.king.c===c)&&!noBuildSq(r,c))t.add(i)}}
+  if(S.ui.mode==="build"){for(let i=0;i<64;i++){const r=Math.floor(i/8),c=i%8;if(!me.grid[i]&&me.owner[i]===me.id&&!me.flags[i]&&!noBuildSq(r,c))t.add(i)}}
   return t;
 }
 /* ---------- 侵略・奪還の配置 ---------- */
