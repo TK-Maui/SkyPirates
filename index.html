@@ -113,16 +113,27 @@ button.mini{min-height:30px;padding:3px 8px;font-size:12px}
 .stepper{border-bottom:1px solid var(--line);padding:4px 0}
 .stepper button{min-width:44px}
 .plist .row{border-bottom:1px solid var(--line);padding:4px 0}
+dialog.rules{width:760px;max-width:96vw;height:90vh;padding:0}
+.rules .rhead{position:sticky;top:0;background:var(--panel);border-bottom:1px solid var(--line);padding:10px 14px;display:flex;gap:8px;align-items:center;z-index:1}
+.rules .rbody{padding:4px 16px 24px;font-size:14px;line-height:1.7}
+.rules .rbody h1{font-size:20px}.rules .rbody h2{font-size:17px;margin-top:22px;border-bottom:1px solid var(--line);padding-bottom:4px}.rules .rbody h3{font-size:15px;margin-top:16px}
+.rules .rbody table{border-collapse:collapse;width:100%;margin:8px 0;font-size:13px;display:block;overflow-x:auto}
+.rules .rbody th,.rules .rbody td{border:1px solid var(--line);padding:4px 6px;vertical-align:top}
+.rules .rbody th{background:var(--bg)}
+.rules .rbody pre{background:var(--bg);padding:8px;border-radius:8px;overflow-x:auto;font-size:12px;line-height:1.35}
+.rules .rbody code{background:var(--bg);border-radius:4px;padding:0 3px}
+.rules .rbody hr{border:none;border-top:1px dashed var(--line);margin:18px 0}
 dialog::backdrop{background:rgba(0,0,0,.4)}
 </style>
 </head>
 <body>
 <div id="app"></div>
 <dialog id="dlg"></dialog>
+<dialog id="rulesdlg" class="rules"></dialog>
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v0.9.9（2026/10/8版：キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v1.0.0（2026/10/9版：設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -1310,10 +1321,46 @@ setInterval(timerTick,1000);
 /* 残り時間の表示（画面全体を描き直さずに数字だけ更新） */
 setInterval(()=>{const el=document.getElementById("timerbadge");if(!el||!S.timerEnd)return;
   const left=Math.max(0,Math.ceil((S.timerEnd-Date.now())/1000));el.textContent=`⏱ 残り${left}秒`;el.classList.toggle("warn",left<=10)},500);
+/* ================= ルールブック表示 =================
+   ルールブックはindex.htmlと同じ場所の rules_easy.md / rules_full.md を、開いたときだけ読み込む（普段の動作は重くならない） */
+const RULE_FILES={easy:["かんたんルールブック","rules_easy.md"],full:["ルールブック","rules_full.md"]};
+const ruleCache={};
+function mdToHtml(md){
+  const lines=md.replace(/\r/g,"").split("\n");let out="",i=0;
+  const inl=t=>esc(t).replace(/`([^`]+)`/g,"<code>$1</code>").replace(/\*\*(.+?)\*\*/g,"<b>$1</b>");
+  while(i<lines.length){const L=lines[i];
+    if(L.startsWith("```")){let j=i+1,buf=[];while(j<lines.length&&!lines[j].startsWith("```"))buf.push(lines[j++]);out+=`<pre>${esc(buf.join("\n"))}</pre>`;i=j+1;continue}
+    const h=L.match(/^(#{1,4})\s+(.*)/);if(h){const n=h[1].length;out+=`<h${n}>${inl(h[2])}</h${n}>`;i++;continue}
+    if(/^---+\s*$/.test(L)){out+="<hr>";i++;continue}
+    if(L.trim().startsWith("|")){const rows=[];while(i<lines.length&&lines[i].trim().startsWith("|"))rows.push(lines[i++]);
+      const cells=r=>r.trim().replace(/^\||\|$/g,"").split("|").map(c=>c.trim());
+      const sep=rows.length>1&&/^\s*\|?\s*:?-{2,}/.test(rows[1]);
+      out+="<table>"+rows.filter((r,k)=>!(sep&&k===1)).map((r,k)=>"<tr>"+cells(r).map(c=>k===0&&sep?`<th>${inl(c)}</th>`:`<td>${inl(c)}</td>`).join("")+"</tr>").join("")+"</table>";continue}
+    if(/^\s*[-・]\s+/.test(L)){let buf="";while(i<lines.length&&/^\s*[-・]\s+/.test(lines[i])){const ind=/^\s{2,}/.test(lines[i]);buf+=`<li${ind?' style="margin-left:18px"':""}>${inl(lines[i].replace(/^\s*[-・]\s+/,""))}</li>`;i++}out+=`<ul>${buf}</ul>`;continue}
+    if(/^\d+\.\s+/.test(L)){let buf="";while(i<lines.length&&/^\d+\.\s+/.test(lines[i])){buf+=`<li>${inl(lines[i].replace(/^\d+\.\s+/,""))}</li>`;i++}out+=`<ol>${buf}</ol>`;continue}
+    if(!L.trim()){i++;continue}
+    let buf=[];while(i<lines.length&&lines[i].trim()&&!/^(#|```|\||---|\s*[-・]\s|\d+\.\s)/.test(lines[i]))buf.push(inl(lines[i++]));
+    if(buf.length)out+=`<p>${buf.join("<br>")}</p>`;else i++;
+  }
+  return out;
+}
+async function openRules(kind){
+  const d=$("#rulesdlg");const [title,file]=RULE_FILES[kind];
+  d.innerHTML=`<div class="rhead"><b class="grow">📖 ${esc(title)}</b><button id="rswap">${kind==="easy"?"ルールブックへ":"かんたんルールブックへ"}</button><button id="rclose">閉じる</button></div><div class="rbody" id="rbody"><p class="sub">読み込んでいます…</p></div>`;
+  if(!d.open)d.showModal();
+  $("#rclose").onclick=()=>d.close();$("#rswap").onclick=()=>openRules(kind==="easy"?"full":"easy");
+  try{
+    if(!ruleCache[kind]){const r=await fetch(file+"?v="+encodeURIComponent(VERSION.slice(0,8)));if(!r.ok)throw new Error(r.status);ruleCache[kind]=mdToHtml(await r.text())}
+    $("#rbody").innerHTML=ruleCache[kind];$("#rbody").scrollTop=0;d.scrollTop=0;
+  }catch(e){$("#rbody").innerHTML=`<p>ルールブックを読み込めませんでした（${esc(String(e.message||e))}）。通信状態を確認して、もう一度開いてください。</p>`}
+}
 function openSettings(){
   const d=$("#dlg");const can=S.mode!=="guest";
   const T=(S.mode==="guest"?(S.view.timers||defaultTimers()):(S.game.timers=S.game.timers||defaultTimers()));
-  d.innerHTML=`<b>⚙ 設定：フェーズの制限時間</b>
+  d.innerHTML=`<div class="row"><button id="bruletog" class="grow">📖 ルール</button></div>
+  <div class="row" id="rulebtns" style="display:none;margin-top:6px"><button class="primary grow" id="brule_easy">かんたんルールブック</button><button class="primary grow" id="brule_full">ルールブック</button></div>
+  <hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
+  <b>⚙ 設定：フェーズの制限時間</b>
   <div class="sub">オンにしたフェーズは、決めた秒数（5〜300秒）を過ぎると、待っている人を自動で進めます。${can?"":"<br>設定を変えられるのは部屋を作った人だけです。"}</div>
   <table class="result-t" style="margin-top:8px"><tr><th>フェーズ</th><th>制限</th><th class="n">秒数</th></tr>
   ${TIMER_PHASES.map(([k,name,what])=>`<tr><td>${esc(name)}<br><small class="sub">時間切れ：${esc(what)}</small></td>
@@ -1321,6 +1368,8 @@ function openSettings(){
     <td class="n"><input type="number" min="5" max="300" step="5" data-tsec="${k}" value="${T[k]?T[k].sec:60}" style="width:72px" ${can?"":"disabled"}></td></tr>`).join("")}</table>
   <div class="row" style="margin-top:8px">${can?`<button class="primary" id="tsave">保存</button><button id="tall">全部オン</button><button id="tnone">全部オフ</button>`:""}<button id="dclose">閉じる</button></div>`;
   d.showModal();$("#dclose").onclick=()=>d.close();
+  $("#bruletog").onclick=()=>{const r=$("#rulebtns");r.style.display=r.style.display==="none"?"flex":"none"};
+  $("#brule_easy").onclick=()=>{d.close();openRules("easy")};$("#brule_full").onclick=()=>{d.close();openRules("full")};
   if(!can)return;
   const read=()=>{const o={};for(const [k] of TIMER_PHASES){const on=d.querySelector(`[data-ton="${k}"]`).checked;let sec=Math.round(+d.querySelector(`[data-tsec="${k}"]`).value||60);sec=Math.min(300,Math.max(5,sec));o[k]={on,sec}}return o};
   $("#tsave").onclick=()=>{S.game.timers=read();S.game.timerSig=null;d.close();toast("制限時間の設定を保存しました");broadcast()};
