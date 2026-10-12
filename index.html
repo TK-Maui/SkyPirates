@@ -133,7 +133,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v1.0.1（2026/10/11版：同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v1.0.2（2026/10/12版：行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -187,7 +187,13 @@ const esc = s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt
 const yen = n=>n.toLocaleString("ja-JP")+"マリー";
 const sq = (r,c)=>`${r+1}-${COLS[c]}`;
 const idx = (r,c)=>r*8+c;
-const rnd = n=>Math.floor(Math.random()*n);
+/* 乱数：ゲームの処理中は、ゲームごとの「種」から作る（同じ種＋同じ行動なら必ず同じ結果＝リプレイ・Unity版との答え合わせ用） */
+let RNG=null;
+const rand01=()=>RNG?RNG():Math.random();
+const rnd = n=>Math.floor(rand01()*n);
+function gameRand(g){let t=(g.rs=(g.rs+0x6D2B79F5)>>>0);t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296}
+function newSeed(){return (Math.random()*4294967296)>>>0}
+function withRng(g,fn){if(typeof g.rs!=="number"){g.seed=newSeed();g.rs=g.seed;g.replayBroken=true}const prev=RNG;RNG=()=>gameRand(g);try{return fn()}finally{RNG=prev}}
 const shuffle = a=>{for(let i=a.length-1;i>0;i--){const j=rnd(i+1);[a[i],a[j]]=[a[j],a[i]]}return a};
 const clone = o=>JSON.parse(JSON.stringify(o));
 const resText = r=>Object.entries(r).map(([k,v])=>RES_JA[k]+v).join("・");
@@ -227,7 +233,7 @@ function newPlayer(id,name){
     pts:{destroyB:0,destroyL:0,kills:0},
     stats:{labor:0,build:0,invade:0,retake:0,laborMoney:0,sold:0,lost:0,chars:0,seq:"",gen:{},up:{houkou:0,shinsou:0,kamui:0},lmTurn:null,downed:0,lostB:0,repairs:0,skipped:0},boosted:false,awakened:false,allyWith:null};
 }
-function newGame(){return {v:5,phase:"lobby",sub:null,turn:0,round:1,rounds:1,r1:null,ally:null,players:[],log:[],createdAt:Date.now()}}
+function newGame(){const seed=newSeed();return {v:5,phase:"lobby",sub:null,turn:0,round:1,rounds:1,r1:null,ally:null,players:[],log:[],createdAt:Date.now(),seed,rs:seed}}
 const P_OF=(g,id)=>g.players.find(q=>q.id===id);
 function alive(b){return !!b&&!b.destroyed}
 function hasLM(p,id){const l=landmarkBuilt(p);return !!l&&!l.destroyed&&l.lm===id}
@@ -380,7 +386,10 @@ function startRound2(g){
   g.players=g.players.map(p=>{const q=newPlayer(p.id,p.name);q.token=p.token;q.connected=p.connected;q.log=["―― 2ラウンド目 ――",...p.log].slice(0,80);return q});
   startSetup(g);return null;
 }
-function startSetup(g){
+function startSetup(g){return withRng(g,()=>startSetup0(g))}
+function startSetup0(g){
+  /* 行動の記録（リプレイ）：1ラウンド目の準備開始時点の状態から、全員の操作を順に記録する */
+  if(g.round===1)g.replay={v:1,rs0:g.rs,seed:g.seed,rounds:g.rounds,players:g.players.map(p=>({id:p.id,name:p.name})),acts:[]};
   const lms=shuffle(LANDMARKS.map(l=>l.id));
   g.players.forEach((p,i)=>{
     p.landmarkId=lms[i%lms.length];
@@ -490,7 +499,9 @@ function actionBlocked(g,p,act){
 /* 処理中に想定外のエラーが起きても止まらないよう、元の状態に戻してエラーを返す */
 function safeApply(g,pid,a,fn){
   const backup=JSON.stringify(g);
-  try{return fn?fn():applyAction(g,pid,a)}
+  try{const t=g.turn,res=withRng(g,()=>fn?fn():applyAction(g,pid,a));
+    if(g.replay&&(!res||JSON.stringify(g)!==backup))g.replay.acts.push(fn?{t,p:pid,proxy:1}:{t,p:pid,a:clone(a)});
+    return res}
   catch(e){const b=JSON.parse(backup);for(const k of Object.keys(g))delete g[k];Object.assign(g,b);
     console.error(e);(g.errors=g.errors||[]).push({at:Date.now(),turn:g.turn,sub:g.sub,pid,a,msg:String(e&&e.message),stack:String(e&&e.stack).slice(0,600)});
     return "内部エラーが起きたので、この操作は取り消しました（部屋を作った人の「全データをダウンロード」で原因を調べられます）："+(e&&e.message)}
@@ -825,7 +836,7 @@ function buildInvQueue(g){
   g.invQ={};
   for(const [tid,list] of Object.entries(q)){
     // 順番：①攻撃回数が多い ②現在の得点が低い ③所持マリーが少ない ④それでも同じなら抽選
-    const lot=Object.fromEntries(list.map(p=>[p.id,Math.random()]));
+    const lot=Object.fromEntries(list.map(p=>[p.id,rand01()]));
     const cmp3=(a,b)=>attackPower(b)-attackPower(a)||scoreNow[a.id]-scoreNow[b.id]||a.money-b.money;
     list.sort((a,b)=>cmp3(a,b)||lot[a.id]-lot[b.id]);
     const drawn=list.some((p,k)=>k>0&&cmp3(list[k-1],p)===0);
@@ -957,6 +968,18 @@ function score(g,p){
   const money=Math.floor(p.money/1000);
   const ally=p.boosted?-10:0;
   return {territory,own,away,flags,flagPts,lm,others,posBonus,buildings,destroy,money,ally,total:territory+flagPts+buildings+destroy+money+ally};
+}
+/* 記録（g.replay）から、同じゲームをもう一度最初から再生する。Unity版との答え合わせ・不具合の再現用 */
+function replayGame(rep,hooks){
+  const g=newGame();g.rounds=rep.rounds;g.seed=rep.seed;g.rs=rep.rs0;
+  rep.players.forEach(x=>g.players.push(newPlayer(x.id,x.name)));
+  startSetup(g);
+  for(const x of rep.acts){
+    if(x.inject){hooks&&hooks.inject&&hooks.inject(g,P_OF(g,x.p));g.replay.acts.push(x);continue}
+    const err=x.proxy?safeApply(g,x.p,null,()=>proxyAct(g,x.p)):safeApply(g,x.p,x.a);
+    if(err&&hooks&&hooks.onErr)hooks.onErr(x,err);
+  }
+  return g;
 }
 function makeRecord(g,p){
   const s=score(g,p),st=p.stats;const n=st.seq.length||1;
