@@ -133,7 +133,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v1.0.2（2026/10/12版：行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v1.0.3（2026/10/12版：空賊基地Lv4は1ラウンド目の順位で11〜14ターン目から・2人でも覚醒・行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -166,7 +166,7 @@ const CHARS = {
   tenshou:{name:"天翔使い",lv:1,time:0,res:{hane:3,mizu:3},eff:"選んだマスと隣の計2マスを自分の領土に（侵略時は3体まで）"},
   kuzoku:{name:"空賊",lv:2,time:0,res:{kumo:5,kome:5},eff:"自分の領土のマスに旗を1本立てる"},
   ryukishi:{name:"竜騎士",lv:3,time:1,res:{taku:7,hane:10,kumo:10,kome:10,mizu:10},eff:"攻撃範囲5マスに単発"},
-  ryuou:{name:"竜騎士王",lv:4,time:3,res:{ishi:5,kome:10,mizu:10},eff:"初期は竜騎士と同じ。生成中に強化して育てる（空賊基地Lv4が必要。覚醒した人は11ターン目から、それ以外は2ラウンド目の14ターン目から）"},
+  ryuou:{name:"竜騎士王",lv:4,time:3,res:{ishi:5,kome:10,mizu:10},eff:"初期は竜騎士と同じ。生成中に強化して育てる（空賊基地Lv4が必要。2ラウンド目のみ。覚醒した人は11ターン目から、それ以外は1ラウンド目の順位で12〜14ターン目から）"},
 };
 const STRENGTH = {
   houkou:{name:"咆哮（竜騎士王の強化）",res:{ishi:7,taku:7},eff:"攻撃回数+1（3回まで）"},
@@ -238,11 +238,24 @@ const P_OF=(g,id)=>g.players.find(q=>q.id===id);
 function alive(b){return !!b&&!b.destroyed}
 function hasLM(p,id){const l=landmarkBuilt(p);return !!l&&!l.destroyed&&l.lm===id}
 function isLv4(b){return (b.kind==="base"&&b.level>=4)||(b.kind==="fac"&&b.lv4)}
-/* 空賊基地のレベル上限：覚醒した人はLv4。覚醒していない人も「2ラウンド目の14ターン目から」Lv4にできる（Lv4の解放） */
-const LV4_OPEN_TURN=14;
+/* 空賊基地のレベル上限：覚醒した人はLv4。覚醒していない人も、1ラウンド目の順位に応じて2ラウンド目の12〜14ターン目から（覚醒がなければ全員11ターン目から）Lv4にできる */
+const LV4_OPEN_TURN=14; /* 1位がLv4にできるターン（2位は13、3位以下は12、覚醒した人は11） */
 const LV4_OPEN_COST={money:3000,res:{ishi:20,taku:20,kumo:10,hane:10}};
-function lv4Open(g){return !!g&&g.round===2&&g.turn>=LV4_OPEN_TURN}
-function baseCap(p,g){return p.boosted||lv4Open(g)?4:3}
+/* 2ラウンド目に空賊基地をLv4にできるターン（10月12日決定）
+   覚醒する人（最高得点から30点以上離れた人のうち、3〜4人なら最下位1人、5〜6人なら下位2人まで、2人なら2位）→11ターン目（覚醒）
+   覚醒しなかった人：1位→14、2位→13、3位以下→12。覚醒する人が1人もいなければ全員11 */
+function lv4Plan(g,rank){
+  if(!g.r1)return null;
+  rank=rank||r1Rank(g);const max=g.r1[rank[0]].total;
+  const q=rank.filter(id=>max-g.r1[id].total>=30);
+  const n=g.players.length>=5?2:1;const awaken=[...q].reverse().slice(0,n);
+  const open={};
+  rank.forEach((id,i)=>{open[id]=!awaken.length?11:awaken.includes(id)?11:i===0?LV4_OPEN_TURN:i===1?13:12});
+  return {awaken,open,rank,qualified:q,n};
+}
+function getLv4Plan(g){if(!g.lv4&&g.r1)g.lv4=lv4Plan(g);return g.lv4}
+function lv4Turn(g,p){const L=g.round===2&&getLv4Plan(g);return L&&L.open[p.id]!=null?L.open[p.id]:LV4_OPEN_TURN}
+function baseCap(p,g){return p.boosted||(!!g&&g.round===2&&g.turn>=lv4Turn(g,p))?4:3}
 /* 同盟・覚醒後はラダーが1段ずり上がる：Lv L→L+1 のコストは、元の Lv(L-1)→L のコスト */
 /* 同盟・覚醒後はラダーが1段ずり上がる（Lv2→3が同盟前のLv1→2と同じ）。万一Lv1の基地があれば通常のコスト */
 function baseUpCost(p,b){if(p.boosted)return BASE_UP[b.level]||BASE_UP[b.level+1]||BASE_UP[3];return b.level>=3?LV4_OPEN_COST:BASE_UP[b.level+1]}
@@ -282,7 +295,7 @@ function bName(b){return b.kind==="fac"?FAC[b.fac].name:b.kind==="base"?"空賊�
 /* ---------- 同盟・覚醒（2ラウンド目の11ターン目、支給の直後） ---------- */
 function r1Rank(g){
   const k=id=>g.r1[id];
-  return g.players.map(p=>p.id).sort((a,b)=>k(b).total-k(a).total||k(b).kills-k(a).kills||k(b).destroyL-k(a).destroyL||k(b).destroyB-k(a).destroyB||k(b).flags-k(a).flags||k(b).away-k(a).away||k(b).moneyRaw-k(a).moneyRaw);
+  return g.players.map(p=>p.id).sort((a,b)=>k(b).total-k(a).total||k(b).kills-k(a).kills||k(b).destroyL-k(a).destroyL||k(b).destroyB-k(a).destroyB||k(b).flags-k(a).flags||k(b).away-k(a).away||k(b).moneyRaw-k(a).moneyRaw||((g.r1Lot||{})[b]||0)-((g.r1Lot||{})[a]||0));
 }
 function applyBoost(g,p,kind){
   if(p.boosted)return;const t=g.turn;p.boosted=true;if(kind==="awaken")p.awakened=true;
@@ -297,15 +310,11 @@ function applyBoost(g,p,kind){
 function formAlly(g,a,b){const A=P_OF(g,a),B=P_OF(g,b);A.allyWith=b;B.allyWith=a;applyBoost(g,A,"ally");applyBoost(g,B,"ally");
   g.players.forEach(p=>{if(p.id!==a&&p.id!==b)logP(g,p,`${A.name}と${B.name}が同盟を結びました`)});logG(g,`同盟：${A.name}×${B.name}`)}
 function startAllyPhase(g){
-  if(!g.r1||g.players.length<3){g.players.forEach(p=>logP(g,p,"覚醒：2人プレイのため発生しません"));return}
-  const rank=r1Rank(g);const max=g.r1[rank[0]].total;
-  const q=rank.filter(id=>max-g.r1[id].total>=30);
-  if(!q.length){g.players.forEach(p=>logP(g,p,"覚醒：1ラウンド目に最高得点から30点以上離れた人がいないため、発生しません"));return}
-  // 同盟は廃止。該当者の中から下位の人が覚醒する（3〜4人プレイは最下位1人、5〜6人プレイは下位2人まで）
-  const n=g.players.length>=5?2:1;const low=[...q].reverse().slice(0,n);
-  low.forEach(id=>{const p=P_OF(g,id);applyBoost(g,p,"awaken");g.players.forEach(x=>{if(x.id!==p.id)logP(g,x,`${p.name}が覚醒しました`)})});
-  const left=q.filter(id=>!low.includes(id));
-  if(left.length)left.forEach(id=>logP(g,P_OF(g,id),`覚醒できるのは${n===1?"最下位の1人":"下位2人"}までのため、覚醒しませんでした`));
+  const L=getLv4Plan(g);if(!L)return;
+  if(!L.awaken.length){g.players.forEach(p=>logP(g,p,"覚醒：1ラウンド目に最高得点から30点以上離れた人がいないため、発生しません（全員が11ターン目から空賊基地をLv4にできます）"));return}
+  L.awaken.forEach(id=>{const p=P_OF(g,id);applyBoost(g,p,"awaken");g.players.forEach(x=>{if(x.id!==p.id)logP(g,x,`${p.name}が覚醒しました`)})});
+  const left=L.qualified.filter(id=>!L.awaken.includes(id));
+  if(left.length)left.forEach(id=>logP(g,P_OF(g,id),`覚醒できるのは${L.n===1?"1人":"下位2人"}までのため、覚醒しませんでした`));
 }
 function allyCands(g,pid){
   const A=g.ally;const ex=new Set([A.first,pid]);
@@ -382,9 +391,12 @@ function proxyAct(g,pid){
 }
 function startRound2(g){
   if(g.phase!=="result"||g.round!==1||g.rounds!==2)return "2ラウンド目は始められません";
+  g.r1Lot=Object.fromEntries(g.players.map(p=>[p.id,rand01()]));g.lv4=lv4Plan(g);
   g.round=2;g.turn=0;g.sub=null;g.ally=null;
   g.players=g.players.map(p=>{const q=newPlayer(p.id,p.name);q.token=p.token;q.connected=p.connected;q.log=["―― 2ラウンド目 ――",...p.log].slice(0,80);return q});
-  startSetup(g);return null;
+  startSetup(g);
+  g.players.forEach(p=>{const t=g.lv4.open[p.id];logP(g,p,g.lv4.awaken.includes(p.id)?"2ラウンド目：あなたは11ターン目に覚醒します（空賊基地Lv4・竜騎士王が11ターン目から）":`2ラウンド目：あなたは${t}ターン目から空賊基地をLv4にできます`)});
+  return null;
 }
 function startSetup(g){return withRng(g,()=>startSetup0(g))}
 function startSetup0(g){
@@ -705,7 +717,7 @@ function applyAction(g,pid,a){
         const b=p.grid[idx(a.r,a.c)];
         if(!b||b.kind!=="base")return "空賊基地ではありません";
         if(b.destroyed)return "壊された基地はレベルアップできません（先に修繕）";
-        if(b.level>=baseCap(p,g))return b.level>=4?"上限のLv4です":`覚醒していない人がLv4にできるのは、2ラウンド目の${LV4_OPEN_TURN}ターン目からです`;
+        if(b.level>=baseCap(p,g))return b.level>=4?"上限のLv4です":g.round===2?`あなたが空賊基地をLv4にできるのは${lv4Turn(g,p)}ターン目からです`:"Lv4にできるのは2ラウンド目だけです";
         const cost=baseUpCost(p,b);
         if(!canAfford(p,cost))return `足りません：${lackText(p,cost)}`;
         snap(p);pay(p,cost);b.level++;
@@ -1009,7 +1021,7 @@ function viewFor(g,pid){
   if(g.sub==="ally"&&g.ally&&me){const A=g.ally;const isApp=A.applicants.includes(pid);
     ally={mode:A.mode,step:A.step,applicants:A.applicants,isApp,answered:pid in A.answers,picked:!!A.picks[pid],third:A.thirdBy===pid,
       cands:isApp?allyCands(g,pid):[],partner:A.mode==="double"?A.applicants.find(x=>x!==pid):null}}
-  return {timers:g.timers||null,timer:timerInfo(g),phase:g.phase,sub:g.sub,turn:g.turn,round:g.round,rounds:g.rounds,r1:g.r1,r2:g.r2||null,ally,pending:pendingIds(g),records:g.phase==="result"?(g.records||[]):null,me:me?publicSelf(me,g):null,waiting,inv,
+  return {timers:g.timers||null,timer:timerInfo(g),phase:g.phase,sub:g.sub,turn:g.turn,round:g.round,rounds:g.rounds,r1:g.r1,r2:g.r2||null,ally,pending:pendingIds(g),records:g.phase==="result"?(g.records||[]):null,lv4Preview:g.phase==="result"&&g.round===1&&g.rounds===2&&g.r1?(()=>{const L=lv4Plan(g);return {rows:L.rank.map(id=>({name:P_OF(g,id).name,awaken:L.awaken.includes(id),turn:L.open[id]}))}})():null,me:me?publicSelf(me,g):null,waiting,inv,
     players:g.players.map(p=>({id:p.id,name:p.name,boosted:p.boosted,awakened:p.awakened,allyWith:p.allyWith})),
     others:g.players.filter(p=>p.id!==pid).map(p=>({id:p.id,name:p.name,connected:p.connected,setupDone:p.setupDone,decided:p.ts.stage==="decided",inspectDone:p.inspectDone,
       board:reveal?islandView(p):null,
@@ -1018,7 +1030,7 @@ function viewFor(g,pid){
     lobby:g.players.map(p=>({id:p.id,name:p.name,connected:p.connected}))};
 }
 function publicSelf(p,g){const o=clone(p);delete o.token;o.undoCount=p.undo.length;delete o.undo;o.cap=cap(p);o.supply=moneySupply(p,g.turn);o.laborBase=laborBase(p,g.turn);o.score=score(g,p);
-  o.usable=usableCount(p,g.turn);o.usableBB=usableByBase(p,g.turn);o.maxUnits=maxUnits(p);o.hasAltar=hasLM(p,"saidan");o.baseCap=baseCap(p,g);
+  o.usable=usableCount(p,g.turn);o.usableBB=usableByBase(p,g.turn);o.maxUnits=maxUnits(p);o.hasAltar=hasLM(p,"saidan");o.baseCap=baseCap(p,g);o.lv4Turn=g.round===2?lv4Turn(g,p):null;o.awakenPlan=!!(g.round===2&&g.lv4&&g.lv4.awaken.includes(p.id));
   o.kingsUsable=p.chars.filter(c=>c.type==="ryuou"&&charUsable(p,c,g.turn)).map(c=>({id:c.id,base:c.base,up:c.up}));return o}
 
 /* ================= 通信 ================= */
@@ -1491,7 +1503,7 @@ function renderLobby(v){
   if(S.mode==="host")h+=`<div>部屋番号 <b style="font-size:22px;letter-spacing:2px">${esc(S.code)}</b></div>
     <div class="sub">友達にはこのリンクを送ってください</div><div class="row"><input readonly value="${esc(url)}" class="grow" id="shareurl"><button id="bcopy">コピー</button></div>`;
   h+=`<ul>${v.lobby.map(p=>`<li>${esc(p.name)}${p.id===S.seat?"（あなた）":""}${p.connected?"":" <span class='pill'>切断中</span>"}</li>`).join("")}</ul>`;
-  h+=`<div class="row" style="margin:8px 0"><span>ラウンド数：</span>${S.mode==="host"?[1,2].map(n=>`<button data-rounds="${n}" class="${v.rounds===n?"on primary":""}">${n}ラウンド</button>`).join(""):`<b>${v.rounds}ラウンド</b>`}</div><div class="sub">2ラウンド制では、2ラウンド目の11ターン目に覚醒が発生することがあり、覚醒していない人も14ターン目から空賊基地をLv4にできます。</div>`;
+  h+=`<div class="row" style="margin:8px 0"><span>ラウンド数：</span>${S.mode==="host"?[1,2].map(n=>`<button data-rounds="${n}" class="${v.rounds===n?"on primary":""}">${n}ラウンド</button>`).join(""):`<b>${v.rounds}ラウンド</b>`}</div><div class="sub">2ラウンド制では、2ラウンド目の11ターン目に覚醒が発生することがあり、覚醒していない人も1ラウンド目の順位に応じて12〜14ターン目から空賊基地をLv4にできます（覚醒がなければ全員11ターン目から）。</div>`;
   if(S.mode==="host")h+=`<button class="primary" id="bstart" ${v.lobby.length<2?"disabled":""}>この${v.lobby.length}人で始める</button><div class="sub">2〜6人で始められます</div>`;
   else h+=`<div class="sub">部屋を作った人が開始するまでお待ちください。</div>`;
   return h+`</div>`;
@@ -1782,8 +1794,8 @@ function renderResult(v){
   const rows=[...all].sort((a,b)=>tot(b)-tot(a));
   let h=`<div class="panel"><h2 style="margin-top:0">${mid?"1ラウンド目終了（中間発表）":fin2?"最終結果（2ラウンド合計）":"ラウンド終了"}</h2><div style="overflow-x:auto"><table class="result-t"><tr><th>順位</th><th>名前</th>${fin2?`<th class="n">合計</th><th class="n">1R</th>`:""}<th class="n">${fin2?"2R":"合計"}</th><th class="n">領土</th><th class="n">旗</th><th class="n">建設物</th><th class="n">破壊・瀕死</th><th class="n">所持金</th><th class="n">同盟</th></tr>
   ${rows.map((r,i)=>`<tr><td>${i+1}</td><td>${esc(r.name)}</td>${fin2?`<td class="n"><b>${tot(r)}</b></td><td class="n">${v.r1[r.id]?v.r1[r.id].total:"-"}</td>`:""}<td class="n"><b>${r.s.total}</b></td><td class="n">${r.s.territory}</td><td class="n">${r.s.flagPts}</td><td class="n">${r.s.buildings}</td><td class="n">${r.s.destroy}</td><td class="n">${r.s.money}</td><td class="n">${r.s.ally||0}</td></tr>`).join("")}</table></div>`;
-  if(mid){const top=Math.max(...all.map(r=>r.s.total));const q=all.filter(r=>top-r.s.total>=30);
-    h+=`<div class="hint">2ラウンド目の11ターン目：${all.length<3?"2人プレイのため覚醒は発生しません":q.length===0?"最高得点から30点以上離れた人がいないため、覚醒は発生しません":(()=>{const n=all.length>=5?2:1;const aw=[...q].sort((a,b)=>a.s.total-b.s.total).slice(0,n);return `<b>${aw.map(r=>esc(r.name)).join("・")}</b>が<b>覚醒</b>します（${n===1?"最下位の1人":"下位2人"}まで・同点のときは順位決定のルールで決まります）`})()}<br>覚醒していない人も、2ラウンド目の${LV4_OPEN_TURN}ターン目から空賊基地をLv4にできます（竜騎士王が作れる）</div>`;
+  if(mid){const L=v.lv4Preview;
+    h+=`<div class="hint"><b>2ラウンド目に空賊基地をLv4にできるターン</b>（竜騎士王が作れる）<br>${L?L.rows.map(x=>`${esc(x.name)}：${x.awaken?"<b>11ターン目に覚醒</b>":`<b>${x.turn}ターン目</b>から`}`).join("　／　"):""}<br><span class="sub">最高得点から30点以上離れた人のうち、下位の人が覚醒（2〜4人は1人・5〜6人は2人まで）。覚醒しなかった人は、1位14・2位13・3位以下12ターン目から。覚醒する人がいなければ全員11ターン目から。同点のときは順位決定のルール（最後は抽選）で決まります</span></div>`;
     h+=S.mode!=="guest"?`<button class="primary" id="bnext">2ラウンド目を始める</button><div class="sub">建物・領土・お金・資材・キャラは引き継がず、ランドマークも抽選し直します。開始時の所持金は2,500マリーです。</div>`:`<div class="sub">部屋を作った人が2ラウンド目を始めるまでお待ちください。</div>`}
   h+=`</div>`;
   h+=recordsHTML(v);
@@ -1910,7 +1922,7 @@ function openCost(tab){
     body+=row("空賊基地 Lv1",BUILD.base,"天翔使いが作れる／2点／耐久3回");
     body+=row("空賊基地 Lv1→Lv2",BASE_UP[2],"空賊が作れる");
     body+=row("空賊基地 Lv2→Lv3",BASE_UP[3],"竜騎士が作れる");
-    body+=row(`空賊基地 Lv3→Lv4（覚醒していない人・2ラウンド目の${LV4_OPEN_TURN}ターン目から）`,LV4_OPEN_COST,"竜騎士王が作れる／毎ターン+300マリー／耐久5回",!!(me&&!me.boosted&&me.baseCap>=4));
+    body+=row(`空賊基地 Lv3→Lv4（覚醒していない人・2ラウンド目の${me&&me.lv4Turn&&!me.awakenPlan?`${me.lv4Turn}ターン目から`:"12〜14ターン目から（1ラウンド目の順位で決まる）"}）`,LV4_OPEN_COST,"竜騎士王が作れる／毎ターン+300マリー／耐久5回",!!(me&&!me.boosted&&me.baseCap>=4));
     body+=row("空賊基地 Lv3→Lv4（覚醒した人）",BASE_UP[3],"竜騎士王が作れる／毎ターン+300マリー／耐久5回。覚醒後はレベルアップのコストが1段ずり上がる（Lv2→3は石8・タク8、Lv3→4は石12・タク12・雲10）",!!(me&&me.boosted));
     body+=row("資材倉庫",BUILD.warehouse,"資材の上限 +10個／2点／耐久3回");
     body+=row(MARKET_REBUILD.name+"（建設）",MARKET_REBUILD,MARKET_REBUILD.eff,!!(me&&me.marketLost&&!me.grid.some(b=>b&&b.kind==="market")));
