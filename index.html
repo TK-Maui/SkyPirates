@@ -133,7 +133,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v1.0.3（2026/10/12版：空賊基地Lv4は1ラウンド目の順位で11〜14ターン目から・2人でも覚醒・行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v1.0.4（2026/10/14版：侵略できる島がないときは侵略を選べない・部屋を作った人は前のフェーズに戻せる（テスト用）・空賊基地Lv4は1ラウンド目の順位で11〜14ターン目から・2人でも覚醒・行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -503,6 +503,8 @@ function actionBlocked(g,p,act){
       const n=Object.values(usableCount(p,g.turn)).reduce((a,b)=>a+b,0);
       if(!n)return "出撃できるキャラがいません";
       if(act==="invade"&&p.money<1000)return "遠征コスト1,000マリーが足りません";
+      if(act==="invade"){const open=g.players?g.players.filter(q=>q.id!==p.id&&q.sealedTurn!==g.turn).length:g.openTargets;
+        if(open===0)return "侵略できる島がありません（ほかの島はすべて封鎖中）";}
     }
   }
   return null;
@@ -1175,7 +1177,39 @@ function joinPart(conn,msg){
   try{return JSON.parse(b.d.join(""))}catch(e){console.error(e);return null}
 }
 function saveHost(){try{localStorage.setItem("ukishima_host_"+S.code,JSON.stringify(S.game));localStorage.setItem("ukishima_last_host",S.code)}catch(e){}}
+/* ---------- テスト用：前のフェーズに戻る（部屋を作った人だけ） ----------
+   フェーズが変わるたびに、そのフェーズが始まった時点の状態を部屋を作った人の画面に保存しておく（最大40個・再読み込みで消える） */
+const HIST_MAX=40;
+function phaseKey(g){return [g.round,g.turn,g.phase,g.sub||"",g.sub==="invade"?g.invStage||"":""].join("|")}
+function phaseLabel(g){
+  const SUBJA={prep:"アクション選択",build:"建設",retake:"奪還",repair:"修繕の確認",ally:"覚醒"};
+  const r=g.rounds===2?`${g.round}R・`:"";
+  if(g.phase==="setup")return r+"準備（キングの配置）";
+  if(g.phase==="inspect")return r+"視察";
+  if(g.phase==="result")return r+"ラウンドの結果";
+  if(g.phase!=="turn")return r+g.phase;
+  const sub=g.sub==="invade"?(g.invStage==="squad"?"侵略（編成）":"侵略（配置）"):(SUBJA[g.sub]||g.sub||"");
+  return `${r}${g.turn}ターン目・${sub}`;
+}
+function recordHist(){
+  const g=S.game;if(!g||S.mode==="guest"||g.phase==="lobby")return;
+  S.hist=S.hist||[];const key=phaseKey(g);
+  if(S.hist.length&&S.hist[S.hist.length-1].key===key)return;
+  S.hist.push({key,label:phaseLabel(g),snap:JSON.stringify(g)});
+  if(S.hist.length>HIST_MAX)S.hist.shift();
+}
+function rewindPhase(){
+  const H=S.hist||[];if(H.length<2)return "これより前のフェーズは保存されていません";
+  H.pop();const tgt=H[H.length-1];const cur=S.game;const ng=JSON.parse(tgt.snap);
+  ng.players.forEach(p=>{const c=cur.players.find(q=>q.id===p.id);if(c){p.connected=c.connected;p.token=c.token}});
+  ng.timers=cur.timers;ng.timerSig=null;
+  for(const k of Object.keys(cur))delete cur[k];Object.assign(cur,ng);
+  logG(cur,`部屋を作った人が「${tgt.label}」の始めに戻しました`);
+  cur.players.forEach(p=>logP(cur,p,`（テスト用）部屋を作った人が「${tgt.label}」の始めに戻しました`));
+  return null;
+}
 function broadcast(){
+  recordHist();
   if(S.mode==="host"){
     for(const [pid,conn] of S.conns){try{sendMsg(conn,{t:"state",view:viewFor(S.game,pid),code:S.code})}catch(e){console.error(e);const p=S.game.players.find(q=>q.id===pid);toast(`${p?p.name:pid}さんへの送信に失敗しました`)}}
     saveHost();
@@ -1396,6 +1430,10 @@ function openSettings(){
   const T=(S.mode==="guest"?(S.view.timers||defaultTimers()):(S.game.timers=S.game.timers||defaultTimers()));
   d.innerHTML=`<div class="row"><button id="bruletog" class="grow">📖 ルール</button></div>
   <div class="row" id="rulebtns" style="display:none;margin-top:6px"><button class="primary grow" id="brule_easy">かんたんルールブック</button><button class="primary grow" id="brule_full">ルールブック</button></div>
+  ${can&&S.game&&S.game.phase!=="lobby"?(()=>{const H=S.hist||[];const prev=H.length>=2?H[H.length-2]:null;
+    return `<hr style="border:none;border-top:1px solid var(--line);margin:10px 0"><b>🧪 テスト用</b>
+    <div class="row" style="margin-top:6px"><button id="brewind" class="grow" ${prev?"":"disabled"}>⏪ 前のフェーズに戻る${prev?`<small>「${esc(prev.label)}」の始めへ</small>`:"<small>戻れるフェーズがありません</small>"}</button></div>
+    <div class="sub">部屋を作った人だけが使えます。全員の画面が、そのフェーズが始まったときの状態に戻ります（続けて押すと、さらに前へ）。運の結果（ルーレットなど）は同じ操作なら同じになります。ページを再読み込みすると、戻れる履歴は消えます。</div>`})():""}
   <hr style="border:none;border-top:1px solid var(--line);margin:10px 0">
   <b>⚙ 設定：フェーズの制限時間</b>
   <div class="sub">オンにしたフェーズは、決めた秒数（5〜300秒）を過ぎると、待っている人を自動で進めます。${can?"":"<br>設定を変えられるのは部屋を作った人だけです。"}</div>
@@ -1408,6 +1446,11 @@ function openSettings(){
   $("#bruletog").onclick=()=>{const r=$("#rulebtns");r.style.display=r.style.display==="none"?"flex":"none"};
   $("#brule_easy").onclick=()=>{d.close();openRules("easy")};$("#brule_full").onclick=()=>{d.close();openRules("full")};
   if(!can)return;
+  const rw=$("#brewind");if(rw)rw.onclick=()=>{const H=S.hist||[];const prev=H[H.length-2];if(!prev)return;
+    if(!confirm(`「${prev.label}」の始めに戻しますか？\n今のフェーズでの全員の操作は取り消されます。`))return;
+    const e=rewindPhase();if(e){toast(e);return}d.close();
+    if(S.mode==="local"){try{localStorage.setItem("ukishima_local",JSON.stringify(S.game))}catch(x){}}
+    toast(`「${prev.label}」の始めに戻しました`);broadcast()};
   const read=()=>{const o={};for(const [k] of TIMER_PHASES){const on=d.querySelector(`[data-ton="${k}"]`).checked;let sec=Math.round(+d.querySelector(`[data-tsec="${k}"]`).value||60);sec=Math.min(300,Math.max(5,sec));o[k]={on,sec}}return o};
   $("#tsave").onclick=()=>{S.game.timers=read();S.game.timerSig=null;d.close();toast("制限時間の設定を保存しました");broadcast()};
   $("#tall").onclick=()=>d.querySelectorAll("[data-ton]").forEach(c=>c.checked=true);
@@ -1610,7 +1653,7 @@ function renderTurn(v){
     else if(ts.stage==="choose"){
       hint=me.sealedTurn===t?"<b>封鎖中</b>：このターンは建設だけ選べます。":"<b>アクション選択</b>：1つだけ選びます。全員が選ぶと、労働→侵略→建設→奪還の順に処理されます。";
       const acts=[["labor",`⚒ 労働<small>${yen(me.laborBase)}×ルーレット</small>`],["build","🏗 建設<small>全員が選んだあと建設フェーズで建てる</small>"],["invade","⚔ 侵略<small>遠征コスト1,000マリー</small>"],["retake","🛡 奪還<small>自分の島へ出撃（無料・休息なし）</small>"]];
-      ctrl=`<div class="acts">${acts.map(([k,n])=>{const bl=actionBlocked({turn:t},me,k);return `<button data-act="${k}" ${bl?"disabled":""}>${n}${bl?`<small>${esc(bl)}</small>`:""}</button>`}).join("")}</div><div class="row" style="margin-top:8px">${common}</div>`;
+      ctrl=`<div class="acts">${acts.map(([k,n])=>{const bl=actionBlocked({turn:t,openTargets:v.others.filter(o=>!(o.board&&o.board.sealedTurn===t)).length},me,k);return `<button data-act="${k}" ${bl?"disabled":""}>${n}${bl?`<small>${esc(bl)}</small>`:""}</button>`}).join("")}</div><div class="row" style="margin-top:8px">${common}</div>`;
     }else{hint=`<b>${ACT_JA[ts.action]}</b>を選びました。全員が選び終えると処理が始まります。`;ctrl=`<button id="bundecide">選び直す</button>${common}`}
   }else if(v.sub==="build"&&ts.action==="build"&&!ts.buildDone){
     hint=S.ui.mode==="build"?`<b>${esc(buildName(S.ui.build,me))}</b> を建てるマスをタップ。<small>（1列目はA・B・G・Hだけ。マスの「+数字」は建物の得点に上乗せ）</small>`:"<b>建設フェーズ</b>：何個でも建てられます。空賊基地をタップするとレベルアップ。終わったら「建設を終える」。";
