@@ -133,7 +133,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v1.0.5（2026/10/14版：侵略の編成画面で取りやめられる・侵略できる島がないときは侵略を選べない・部屋を作った人は前のフェーズに戻せる（テスト用）・空賊基地Lv4は1ラウンド目の順位で11〜14ターン目から・2人でも覚醒・行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v1.1.0（2026/11/24版：CPU対戦（普通・強い）を追加・侵略の編成画面で取りやめられる・侵略できる島がないときは侵略を選べない・部屋を作った人は前のフェーズに戻せる（テスト用）・空賊基地Lv4は1ラウンド目の順位で11〜14ターン目から・2人でも覚醒・行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -393,7 +393,7 @@ function startRound2(g){
   if(g.phase!=="result"||g.round!==1||g.rounds!==2)return "2ラウンド目は始められません";
   g.r1Lot=Object.fromEntries(g.players.map(p=>[p.id,rand01()]));g.lv4=lv4Plan(g);
   g.round=2;g.turn=0;g.sub=null;g.ally=null;
-  g.players=g.players.map(p=>{const q=newPlayer(p.id,p.name);q.token=p.token;q.connected=p.connected;q.log=["―― 2ラウンド目 ――",...p.log].slice(0,80);return q});
+  g.players=g.players.map(p=>{const q=newPlayer(p.id,p.name);q.token=p.token;q.connected=p.connected;if(p.cpu)q.cpu=p.cpu;q.log=["―― 2ラウンド目 ――",...p.log].slice(0,80);return q});
   startSetup(g);
   g.players.forEach(p=>{const t=g.lv4.open[p.id];logP(g,p,g.lv4.awaken.includes(p.id)?"2ラウンド目：あなたは11ターン目に覚醒します（空賊基地Lv4・竜騎士王が11ターン目から）":`2ラウンド目：あなたは${t}ターン目から空賊基地をLv4にできます`)});
   return null;
@@ -1038,7 +1038,7 @@ function viewFor(g,pid){
       board:reveal?islandView(p):null,
       score:g.phase==="result"?score(g,p):null,money:g.phase==="result"?p.money:null})),
     scores:reveal&&g.phase!=="lobby"&&g.phase!=="setup"?g.players.map(p=>({id:p.id,name:p.name,...score(g,p)})):null,
-    lobby:g.players.map(p=>({id:p.id,name:p.name,connected:p.connected}))};
+    lobby:g.players.map(p=>({id:p.id,name:p.name,connected:p.connected,cpu:p.cpu||null}))};
 }
 function publicSelf(p,g){const o=clone(p);delete o.token;o.undoCount=p.undo.length;delete o.undo;o.cap=cap(p);o.supply=moneySupply(p,g.turn);o.laborBase=laborBase(p,g.turn);o.score=score(g,p);
   o.usable=usableCount(p,g.turn);o.usableBB=usableByBase(p,g.turn);o.maxUnits=maxUnits(p);o.hasAltar=hasLM(p,"saidan");o.baseCap=baseCap(p,g);o.lv4Turn=g.round===2?lv4Turn(g,p):null;o.awakenPlan=!!(g.round===2&&g.lv4&&g.lv4.awaken.includes(p.id));
@@ -1224,6 +1224,7 @@ function broadcast(){
     saveHost();
   }
   try{S.view=viewFor(S.game,S.seat);render()}catch(e){console.error(e);toast("画面の表示でエラー："+e.message)}
+  cpuSchedule();
 }
 async function hostCreate(name,resumeCode){
   S.mode="host";S.code=resumeCode||makeCode();
@@ -1263,7 +1264,7 @@ function hostOnData(conn,msg){
     if(!p){
       if(g.phase!=="lobby"){conn.send({t:"err",msg:"ゲームはもう始まっています（前に参加した端末からなら再参加できます）"});return}
       if(g.players.length>=6){conn.send({t:"err",msg:"満員です（最大6人）"});return}
-      p=newPlayer("P"+(g.players.length+1),String(msg.name||"プレイヤー").slice(0,12));p.token=msg.token;g.players.push(p);
+      p=newPlayer(freePid(g),String(msg.name||"プレイヤー").slice(0,12));p.token=msg.token;g.players.push(p);
       toast(`${p.name}さんが参加しました`);
     }else toast(`${p.name}さんが再接続しました`);
     p.connected=true;S.conns.set(p.id,conn);
@@ -1465,9 +1466,10 @@ function openSettings(){
   $("#tall").onclick=()=>d.querySelectorAll("[data-ton]").forEach(c=>c.checked=true);
   $("#tnone").onclick=()=>d.querySelectorAll("[data-ton]").forEach(c=>c.checked=false);
 }
-function localStart(names,rounds){
+function localStart(names,rounds,cpus){
   S.mode="local";S.code="LOCAL";S.game=newGame();S.game.rounds=rounds||1;
   names.forEach((n,i)=>S.game.players.push(newPlayer("P"+(i+1),n)));
+  (cpus||[]).forEach(lv=>addCpu(S.game,lv));
   S.seat="P1";startSetup(S.game);broadcast();
 }
 function doAct(a){
@@ -1476,6 +1478,543 @@ function doAct(a){
   if(S.mode==="local"){try{localStorage.setItem("ukishima_local",JSON.stringify(S.game))}catch(e){}}
   broadcast();
 }
+
+/* ================= CPU（コンピューター対戦相手） =================
+   部屋を作った人（と1台モード）の画面で動く。CPUの操作も人と同じ「行動」として applyAction に渡すので、
+   ルール違反はできず、行動の記録（リプレイ）にもそのまま残る。
+   強さ：normal（普通：適度に考える・少しぶれる）／ strong（強い：先を読んで、ほぼ最善の手を選ぶ）
+   CPUの判断に使う乱数はゲームの「種」とは別（Math.random）。結果の再現は行動の記録で行う。 */
+const CPU_JA={normal:"普通",strong:"強い"};
+const CPU_NAMES=["ジーク","ルナ","ガロ","ミラ","ボルド","シエル"];
+function isCpu(p){return !!(p&&p.cpu)}
+const cpuR=()=>Math.random();
+const cpuStrong=p=>p.cpu==="strong";
+/* お金に直した価値。得点1点＝1,000マリー、資材1個≒60マリー */
+const CPU_PT=1000,CPU_RES=60;
+function cpuLeft(g){return TOTAL_TURNS-g.turn}
+function cpuNoise(p,v){return cpuStrong(p)?v:v*(0.8+0.4*cpuR())}
+function cpuOpp(g,p){return g.players.filter(q=>q.id!==p.id)}
+/* 次のターンに入ってくる資材（施設の生産） */
+function cpuIncome(p,t){const add={};RES.forEach(r=>add[r]=0);
+  p.grid.forEach(b=>{if(b&&b.kind==="fac"&&b.opened&&!b.destroyed&&b.openedTurn<t){const lv=facLevel(b,t);FAC[b.fac].prod.forEach(r=>add[r]+=LV_SUPPLY[lv])}});return add}
+function cpuMarket(g,p){const m=p.grid.find(b=>b&&b.kind==="market");return !!m&&m.opened&&m.openedTurn<g.turn}
+function cpuCanPay(p,cost,keep){keep=keep||{};if(p.money-(keep.money||0)<cost.money)return false;for(const[k,v]of Object.entries(cost.res||{}))if(p.res[k]-((keep.res||{})[k]||0)<v)return false;return true}
+function cpuEmptySquares(g,p){const o=[];for(let i=0;i<64;i++){const r=Math.floor(i/8),c=i%8;if(!p.grid[i]&&p.owner[i]===p.id&&!p.flags[i]&&!noBuildSq(r,c))o.push(i)}return o}
+/* 敵がこのマスを攻撃できる「立ち位置」の数（侵略は前＝8列目方向：1つ上の列の3マスと左右から当たる） */
+function cpuThreat(g,p,i){
+  const r=Math.floor(i/8),c=i%8;let n=0;
+  for(const [a,b] of [[r-1,c-1],[r-1,c],[r-1,c+1],[r,c-1],[r,c+1]]){if(!inB(a,b))continue;const j=idx(a,b);
+    if(p.owner[j]!==p.id)n+=1.5;else if(!alive(p.grid[j])&&!kingAt(p,j))n+=1}
+  return n;
+}
+/* ---------- 何がどれだけ必要か（資材の目安） ---------- */
+function cpuWant(g,p){
+  const t=g.turn,s=cpuStrong(p);
+  const own=usableCountAll(p);
+  return {tenshou:t>=6?(s?4:3):0,kuzoku:t>=7?(s?2:1):0,ryukishi:t>=6?(s?5:4):0,own};
+}
+function usableCountAll(p){const n={};for(const c of p.chars)if(!c.floating&&alive(baseByLabel(p,c.base)))n[c.type]=(n[c.type]||0)+1;
+  for(const {b} of bases(p))if(alive(b)&&b.gen)n[b.gen.type]=(n[b.gen.type]||0)+1;return n}
+/* 建設に回したい資材を残す（キャラ生成のときに使いすぎない） */
+function cpuReserve(g,p){
+  const keep={money:0,res:{}};
+  const add=(cost)=>{keep.money+=cost.money||0;for(const[k,v]of Object.entries(cost.res||{}))keep.res[k]=(keep.res[k]||0)+v};
+  if(g.turn<=15&&!landmarkBuilt(p)){const lm=LM[p.landmarkId];add({money:0,res:lm.res})}
+  if(g.round===2&&g.turn>=lv4Turn(g,p)-2&&!bases(p).some(({b})=>alive(b)&&b.level>=4))add({money:0,res:LV4_OPEN_COST.res});
+  const bs=bases(p).filter(({b})=>alive(b));
+  if(g.turn>=4&&g.turn<=11&&bs.length&&baseMaxLv(p)<3){const b=bs.reduce((a,x)=>x.b.level>a.b.level?x:a).b;const c=baseUpCost(p,b);if(c)add({money:0,res:c.res})}
+  // あふれそうな資材は残さない
+  const C=cap(p),inc=cpuIncome(p,g.turn+1);for(const r of Object.keys(keep.res))keep.res[r]=Math.max(0,Math.min(keep.res[r],C-inc[r]-4));
+  return keep;
+}
+
+/* ---------- 準備：キングの配置 ---------- */
+function cpuPlaceKing(g,p){
+  const s=cpuStrong(p);
+  const cols=s?[3,4,2,5,1,6,0,7]:shuffleM([0,1,2,3,4,5,6,7]);
+  return {kind:"placeKing",r:7,c:cols[0]};
+}
+function shuffleM(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(cpuR()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
+
+/* ---------- キングの移動 ---------- */
+function cpuDist(p,from,goal){/* 自分の領土を通る最短手数 */
+  const seen=new Map([[from,0]]);const q=[from];
+  while(q.length){const i=q.shift();const d=seen.get(i);if(goal(i))return d;const r=Math.floor(i/8),c=i%8;
+    for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const a=r+dr,b=c+dc;if(!inB(a,b))continue;const j=idx(a,b);if(seen.has(j)||p.owner[j]!==p.id)continue;seen.set(j,d+1);q.push(j)}}
+  return 99;
+}
+function cpuKingMove(g,p){
+  const mv=kingMoves(p);if(!mv.length)return {kind:"stay"};
+  const s=cpuStrong(p);const unopened=i=>{const b=p.grid[i];return !!b&&(b.kind==="fac"||b.kind==="market")&&!b.opened};
+  const anyUn=p.grid.some((b,i)=>unopened(i));
+  const late=g.turn>=10;
+  let best=null,bv=-1e9;
+  for(const i of mv){
+    const b=p.grid[i];let v=0;
+    if(unopened(i))v+=b.kind==="fac"?8000:5000;
+    else if(anyUn)v-=600*cpuDist(p,i,unopened);
+    if(b&&!b.destroyed&&b.opened!==false&&b.kind!=="market"&&!unopened(i))v+=KING_BONUS;
+    if(b&&b.kind==="market"&&b.opened&&b.openedTurn<g.turn&&!b.destroyed){const C=cap(p),inc=cpuIncome(p,g.turn+1);const over=RES.reduce((a,r)=>a+Math.max(0,p.res[r]+inc[r]-C),0);v+=s?Math.min(10,over)*50+100:150}
+    if(late&&s){v-=900*cpuThreat(g,p,i);if(Math.floor(i/8)===0)v+=600}
+    else if(late)v-=300*cpuThreat(g,p,i);
+    // 次のターンに動けなくならないように
+    const r=Math.floor(i/8),c=i%8;let nb=0;for(let dr=-1;dr<=1;dr++)for(let dc=-1;dc<=1;dc++){if(!dr&&!dc)continue;const a=r+dr,cc=c+dc;if(inB(a,cc)&&p.owner[idx(a,cc)]===p.id&&!(a===p.king.r&&cc===p.king.c))nb++}
+    if(nb===0)v-=3000;
+    v=cpuNoise(p,v)+(s?0:cpuR()*200);
+    if(v>bv){bv=v;best=i}
+  }
+  return {kind:"move",r:Math.floor(best/8),c:best%8};
+}
+
+/* ---------- 売却（あふれる資材・お金が足りないとき） ---------- */
+function cpuSell(g,p){
+  if(!cpuMarket(g,p))return null;
+  if((S.cpuNoSell||{})[p.id]===phaseKey(g))return null;
+  const ts=p.ts;const capN=ts.sellCap||10,capT=ts.sellTypes||2;const left=capN-ts.sold;if(left<=0)return null;
+  const types=new Set(ts.soldTypes);const C=cap(p);const inc=cpuIncome(p,g.turn+1);
+  const keep=cpuReserve(g,p).res;
+  let best=null,bn=0;
+  for(const r of RES){
+    if(!types.has(r)&&types.size>=capT)continue;
+    if(p.res[r]<=0)continue;
+    // あふれる分
+    let n=Math.max(0,p.res[r]+inc[r]-C);
+    // 強い：お金が要るときは、余っている資材を売る
+    if(cpuStrong(p)&&g.turn>=2){const spare=p.res[r]-(keep[r]||0)-(g.turn>=8?14:6);if(spare>n&&p.money<3000)n=Math.max(n,Math.min(spare,6))}
+    n=Math.min(n,left,p.res[r]);
+    if(n>bn){bn=n;best=r}
+  }
+  if(!best||bn<1)return null;
+  return {kind:"sell",res:best,n:bn};
+}
+
+/* ---------- キャラの生成と竜騎士王の強化 ---------- */
+function cpuGen(g,p){
+  const ts=p.ts,t=g.turn,s=cpuStrong(p);
+  // 竜騎士王の強化（1ターン1回）
+  for(const {b,i} of bases(p)){
+    if(!alive(b)||!b.gen||b.gen.type!=="ryuou")continue;const up=b.gen.up;
+    if(b.gen.upTurn===t||up.houkou+up.shinsou+up.kamui>=3)continue;
+    const order=s?["houkou","houkou","shinsou","kamui","houkou","shinsou"]:shuffleM(["houkou","shinsou","kamui","houkou","shinsou"]);
+    const done={houkou:0,shinsou:0,kamui:0};
+    for(const k of order){
+      if(k==="kamui"&&up.kamui>=1)continue;
+      // 強い：咆哮2・伸槍1の順で育てる（3連撃×8マスで、範囲の建物をまとめて壊せる）
+      if(s){done[k]++;if(done[k]<=up[k])continue}
+      if(canAfford(p,{money:0,res:STRENGTH[k].res}))return {kind:"strengthen",i,up:k};
+    }
+  }
+  const want=cpuWant(g,p);const have=want.own;const keep=cpuReserve(g,p);
+  const lv4keep=g.round===2&&g.turn>=lv4Turn(g,p)-2&&!bases(p).some(({b})=>alive(b)&&b.level>=4)?{money:0,res:LV4_OPEN_COST.res}:{};
+  const opts=[];
+  for(const {b,i} of bases(p)){
+    if(!alive(b)||b.gen||ts.genBases.includes(i))continue;
+    // 竜騎士王：完成まで3ターン。19ターン目までに完成するなら作る
+    if(b.level>=4&&t+3<=TOTAL_TURNS){const c={money:0,res:CHARS.ryuou.res};if(canAfford(p,c))opts.push({v:9000+(TOTAL_TURNS-t)*300,a:{kind:"gen",i,char:"ryuou"}})}
+    const kp={money:0,res:{...keep.res}};for(const[k,v]of Object.entries(lv4keep.res||{}))kp.res[k]=Math.max(kp.res[k]||0,v);
+    if(b.level>=3&&(have.ryukishi||0)<want.ryukishi&&t+1<=TOTAL_TURNS){const c={money:0,res:CHARS.ryukishi.res};if(cpuCanPay(p,c,kp))opts.push({v:5000-(have.ryukishi||0)*400,a:{kind:"gen",i,char:"ryukishi"}})}
+    if((have.tenshou||0)<want.tenshou){const c={money:0,res:CHARS.tenshou.res};if(cpuCanPay(p,c,kp))opts.push({v:4200-(have.tenshou||0)*500,a:{kind:"gen",i,char:"tenshou"}})}
+    if(b.level>=2&&(have.kuzoku||0)<want.kuzoku){const c={money:0,res:CHARS.kuzoku.res};if(cpuCanPay(p,c,kp))opts.push({v:2500-(have.kuzoku||0)*600,a:{kind:"gen",i,char:"kuzoku"}})}
+  }
+  if(!opts.length)return null;
+  opts.forEach(o=>o.v=cpuNoise(p,o.v));opts.sort((a,b)=>b.v-a.v);
+  return opts[0].a;
+}
+
+/* ---------- 建設：候補と価値 ---------- */
+function cpuFacValue(g,p,fac){
+  const left=cpuLeft(g);if(left<=1)return 0;
+  // 生産量：1〜2ターン目はLv1(2個)、3〜5ターン目はLv2(4個)、それ以降Lv3(8個)。資材2種類
+  let n=0;for(let k=1;k<=left;k++){const d=k-1;n+=d>=5?8:d>=2?4:2}
+  let need=1;const inc=cpuIncome(p,g.turn+1);const [a,b]=FAC[fac].prod;
+  // 足りない資材ほど価値が高い
+  const lack=(inc[a]+inc[b])/2;need=lack<=2?1.4:lack<=6?1.0:0.6;
+  if(fac==="shrine"&&g.turn>=5)need*=1.15;
+  return n*2*CPU_RES*need*0.6;
+}
+function cpuLmValue(g,p){
+  const lm=LM[p.landmarkId];const left=cpuLeft(g);
+  let eff={izumi:1000*left,noroshi:g.turn<=16?2500:800,toudai:2000,jousai:2500,kinko:g.turn<=17?3500:1500,saidan:2000}[lm.id]||1500;
+  return 5*CPU_PT+eff+(g.turn<=12?3000:g.turn<=15?1500:0);
+}
+function cpuBuildOptions(g,p){
+  const s=cpuStrong(p);const left=cpuLeft(g);const late=g.turn>=11;
+  const sq=cpuEmptySquares(g,p);const out=[];
+  const posVal=i=>{let v=ringOf(i)*CPU_PT;if(late||g.turn>=8)v-=(s?350:120)*cpuThreat(g,p,i);return v};
+  const bestSq=(n)=>{const arr=sq.map(i=>({i,v:posVal(i)+(s?0:cpuR()*700)})).sort((a,b)=>b.v-a.v);return arr.slice(0,n||1)};
+  // 壊されやすさ：後半は建物が壊されるかもしれない
+  const surv=g.turn>=TOTAL_TURNS?1:late?1-Math.min(0.45,0.05*left):g.turn>=8?0.9:1;
+  const add=(what,cost,base,i)=>{out.push({a:{kind:"build",what,r:Math.floor(i/8),c:i%8},cost,v:base*surv+posVal(i)*surv+2*CPU_PT*surv})};
+  if(sq.length){
+    const top=bestSq(1)[0].i;
+    const nb=bases(p).length;
+    const lmB=landmarkBuilt(p);
+    if(!lmB&&LM[p.landmarkId].ok(p))add("landmark",{money:LM[p.landmarkId].money,res:LM[p.landmarkId].res},cpuLmValue(g,p)-2*CPU_PT,top);
+    for(const f of ["mine","lab","shrine"])add(f,BUILD[f],cpuFacValue(g,p,f)+(f==="lab"&&!lmB&&p.landmarkId==="toudai"&&countFac(p,"lab")<2&&g.turn<=13?4500:0),top);
+    if(nb<(s?3:2)||(nb<4&&g.turn<=12&&p.money>6000)){const v=nb===0?9000:nb===1?(g.turn<=12?4500:1500):nb===2?(g.turn<=13?2500:600):800;add("base",BUILD.base,v,top)}
+    const C=cap(p);const inc=cpuIncome(p,g.turn+1);const over=RES.reduce((a,r)=>a+Math.max(0,p.res[r]+inc[r]*2-C),0);
+    add("warehouse",BUILD.warehouse,Math.min(2500,over*CPU_RES*0.5)+(countKind(p,"warehouse")===0&&LM[p.landmarkId].id==="jousai"&&!lmB?3500:0),top);
+    if(p.marketLost&&!p.grid.some(x=>x&&x.kind==="market"))add("market",MARKET_REBUILD,1500,top);
+  }
+  // 空賊基地のレベルアップ
+  for(const {b,i} of bases(p)){
+    if(!alive(b)||b.level>=baseCap(p,g))continue;const cost=baseUpCost(p,b);if(!cost)continue;
+    const L=b.level+1;let v=0;
+    const top=baseMaxLv(p);
+    if(L===2)v=top<2?(g.turn<=13?(g.turn>=3?9000:6000):1500):(g.turn<=12?3500:1000);
+    if(L===2&&!landmarkBuilt(p)&&["noroshi","kinko"].includes(p.landmarkId)&&top<2)v+=4000;
+    if(L===3)v=top<3?(g.turn<=15?(g.turn>=6?16000:11000):3000):(g.turn<=13?5500:1200);
+    if(L===4)v=(left>=4?9000:left>=2?2500:500)+300*left;
+    if(L===4&&bases(p).filter(x=>alive(x.b)&&x.b.level>=4).length>=1)v*=0.55;
+    out.push({a:{kind:"upgrade",r:Math.floor(i/8),c:i%8},cost,v});
+  }
+  // 修繕（壊された建物）
+  for(let i=0;i<64;i++){const b=p.grid[i];if(!b||!b.destroyed||b.repairUntil||b.kind==="market"||b.kind==="warehouse")continue;
+    const rc=cpuRepairCost(g,p,b);if(!rc)continue;out.push({a:{kind:"repair",i},cost:rc.cost,v:cpuRepairValue(g,p,i,rc.dur)})}
+  return out.filter(o=>o.v>0);
+}
+function cpuRepairCost(g,p,b){
+  const altar=hasLM(p,"saidan")&&!(b.kind==="landmark"&&b.lm==="saidan");const dur=altar?1:2;
+  if(g.turn+dur>TOTAL_TURNS)return null;
+  const base=REPAIR[b.kind==="fac"?"fac":b.kind];if(!base)return null;
+  const cost=altar?{money:Math.ceil(base.money/2),res:Object.fromEntries(Object.entries(base.res).map(([k,v])=>[k,Math.ceil(v/2)]))}:base;
+  return {cost,dur};
+}
+function cpuRepairValue(g,p,i,dur){
+  const b=p.grid[i];const left=cpuLeft(g)-dur;if(left<0)return 0;
+  let v=(b.kind==="landmark"?5:2)*CPU_PT+ringOf(i)*CPU_PT;
+  if(p.owner[i]!==p.id)v+=CPU_PT;if(p.flags[i])v+=2*CPU_PT;
+  if(b.kind==="fac")v+=left*8*CPU_RES*0.5;
+  if(b.kind==="base")v+=left>=2?2500:500;
+  if(b.kind==="landmark")v+=cpuLmValue(g,p)-5*CPU_PT;
+  return v*(g.turn>=11?0.8:1);
+}
+/* 貯めてでも手に入れたい大物（ランドマーク・空賊基地Lv3・Lv4）。まだ買えないなら、それ以外にお金・資材を使いすぎない */
+function cpuGoal(g,p){
+  let best=null;
+  for(const o of cpuBuildOptions(g,p)){
+    const big=(o.a.kind==="build"&&o.a.what==="landmark")||(o.a.kind==="upgrade"&&(p.grid[idx(o.a.r,o.a.c)].level+1>=3||baseMaxLv(p)<2));
+    if(!big)continue;if(!best||o.v>best.v)best=o;
+  }
+  if(!best||canAfford(p,best.cost))return null;
+  // あと何ターンで買えそうか（労働1回で平均1,500マリー＋支給）
+  const lackM=Math.max(0,best.cost.money-p.money);const inc=cpuIncome(p,g.turn+1);
+  const lackR=Object.entries(best.cost.res||{}).some(([k,v])=>p.res[k]+inc[k]*2<v);
+  if(lackR||lackM>4500)return null;
+  return best;
+}
+/* 今のお金・資材で、価値の高い順に建てたときの合計価値 */
+function cpuBuildPlan(g,p,money,res,maxN){
+  const opts=cpuBuildOptions(g,p);let m=money,r={...res};const used=new Set();let total=0,n=0;const acts=[];
+  const keepMoney=g.turn>=10&&g.turn<TOTAL_TURNS?1000:0;
+  const goal=cpuGoal(g,p);const gk=goal?JSON.stringify(goal.a):null;
+  while(n<(maxN||6)){
+    let best=null,bv=0;
+    for(const o of opts){
+      const key=o.a.kind+(o.a.what||"")+(o.a.i!=null?o.a.i:"")+(o.a.r!=null?o.a.r+"_"+o.a.c:"");
+      if(used.has(key))continue;
+      if(o.a.kind==="build"&&used.has("sq"+o.a.r+"_"+o.a.c))continue;
+      if(o.a.kind==="build"&&o.a.what!=="landmark"&&used.has("w"+o.a.what)&&o.a.what!=="mine"&&o.a.what!=="lab"&&o.a.what!=="shrine")continue;
+      if(m-keepMoney<o.cost.money)continue;if(Object.entries(o.cost.res||{}).some(([k,v])=>r[k]<v))continue;
+      // 大物を貯めている間は、それに要るお金・資材を減らすものは後回し（とても価値の高いものは別）
+      if(goal&&JSON.stringify(o.a)!==gk&&o.v<goal.v*0.6){const mm=m-o.cost.money;if(mm<goal.cost.money&&p.money+1500<goal.cost.money+o.cost.money)continue;
+        if(Object.entries(o.cost.res||{}).some(([k,v])=>(goal.cost.res||{})[k]&&r[k]-v<(goal.cost.res||{})[k]))continue}
+      const ratio=o.v/Math.max(500,o.cost.money+Object.values(o.cost.res||{}).reduce((a,b)=>a+b,0)*CPU_RES);
+      if(ratio>bv){bv=ratio;best={o,key}}
+    }
+    if(!best||bv<0.9)break;
+    used.add(best.key);if(best.o.a.kind==="build"){used.add("sq"+best.o.a.r+"_"+best.o.a.c);used.add("w"+best.o.a.what)}
+    m-=best.o.cost.money;for(const[k,v]of Object.entries(best.o.cost.res||{}))r[k]-=v;
+    total+=best.o.v-best.o.cost.money-Object.values(best.o.cost.res||{}).reduce((a,b)=>a+b,0)*CPU_RES*0.5;n++;acts.push(best.o.a);
+  }
+  return {total,acts};
+}
+
+/* ---------- 侵略の計画（軽い試算で、配置を1体ずつ一番得になる場所へ） ---------- */
+function cpuSimInv(g,me,isl,units){
+  const t=g.turn;const owner=isl.owner.slice(),flags=isl.flags.slice(),dmg=isl.dmg.slice();
+  const hits=isl.hits.map(h=>h?{...h}:null);const dead=new Set();let kd=isl.kingDmg,kh={...isl.kingHits},down=isl.kingDownTurn===t;
+  const kinko=hasLM(me,"kinko")?3:1;
+  let pts=0,loot=0,opp=0,part=0,flagOpp={};
+  /* 取った領土・立てた旗は、相手に取り返されやすい（相手が天翔使いを持っていれば特に） */
+  const back=Object.values(usableCount(isl,t+1)).reduce((a,b)=>a+b,0)>0;const WT=t>=TOTAL_TURNS?0.7:back?0.4:0.75,WF=back?0.5:0.75;
+  const live=i=>alive(isl.grid[i])&&!dead.has(i);
+  const kAt=i=>isl.king&&idx(isl.king.r,isl.king.c)===i;
+  const takeOk=i=>owner[i]!==me.id&&!live(i)&&!flags[i]&&!(kAt(i)&&!down);
+  const credit=h=>{let best=null,bv=-1;for(const [k,v] of Object.entries(h||{}))if(v>=bv){best=k;bv=v}return best};
+  const hit=j=>{
+    const fl=flags[j];if(fl&&fl!==me.id){flags[j]=null;flagOpp[fl]=(flagOpp[fl]||0)+2}
+    const b=isl.grid[j];
+    if(live(j)&&b.opened!==false){dmg[j]++;hits[j]=hits[j]||{};const n=(hits[j][me.id]||0)+1;delete hits[j][me.id];hits[j][me.id]=n;
+      const d=durability(isl,j);
+      if(dmg[j]>=d){dead.add(j);const lm=b.kind==="landmark";if(credit(hits[j])===me.id){pts+=lm?5:3;loot+=(lm?1500:500)*kinko}
+        opp+=(lm?5:2)+ringOf(j)+(b.kind==="fac"?2:b.kind==="base"?2:0)+(lm?3:0)}
+      else part+=(dmg[j]/d)*0.35*((b.kind==="landmark"?5:3)+ringOf(j)*0.5)}
+    if(kAt(j)&&!down){kd++;const n=(kh[me.id]||0)+1;delete kh[me.id];kh[me.id]=n;
+      if(kd>=7){down=true;if(credit(kh)===me.id){pts+=10;loot+=3000*kinko}opp+=6}else part+=cpuStrong(me)?0.9:0.25}
+  };
+  for(const u of units.filter(u=>u.type==="tenshou"))for(const [r,c] of [[u.r,u.c],[u.r2,u.c2]]){const i=idx(r,c);if(inB(r,c)&&takeOk(i)){owner[i]=me.id;pts+=WT;opp+=WT}}
+  for(const u of units.filter(u=>u.type==="kuzoku")){const i=idx(u.r,u.c);const fl=flags[i];
+    if(fl&&fl!==me.id){flags[i]=null;flagOpp[fl]=(flagOpp[fl]||0)+2}else if(owner[i]===me.id&&!fl){flags[i]=me.id;pts+=2*WF}}
+  for(const u of units.filter(u=>u.type==="ryukishi")){const i=idx(u.r,u.c);if(owner[i]!==me.id)continue;for(const j of rangeOf(u.r,u.c,+1))hit(j)}
+  for(const u of units.filter(u=>u.type==="ryuou")){const k=me.chars.find(c=>c.id===u.id);const up=(k&&k.up)||{};const i=idx(u.r,u.c);if(owner[i]!==me.id)continue;
+    const rg=kingRange(u.r,u.c,+1,up.shinsou||0);for(let h=0;h<1+(up.houkou||0);h++)for(const j of rg)hit(j);
+    if(up.kamui)for(const j of rg)if(takeOk(j)){owner[j]=me.id;pts+=WT;opp+=WT}}
+  return {my:pts*CPU_PT+loot+part*CPU_PT,opp:opp*CPU_PT,flagOpp,owner};
+}
+/* units候補：[{type,base}|{type:"ryuou",id}] から配置を決める。mustAll=trueなら全員を置く */
+function cpuPlanInv(g,me,isl,avail,mustAll){
+  const s=cpuStrong(me);const blocked=i=>tenshouBlocked(g,isl,i);
+  const units=[];
+  const W=cpuOppW(g,me,isl);
+  const val=us=>{const r=cpuSimInv(g,me,isl,us);return r.my+r.opp*W};
+  let cur=val(units);
+  const ten=avail.filter(u=>u.type==="tenshou");const atk=avail.filter(u=>u.type==="ryuou"||u.type==="ryukishi");const kz=avail.filter(u=>u.type==="kuzoku");
+  const pw=u=>u.type==="ryuou"?2+(((me.chars.find(c=>c.id===u.id)||{}).up||{}).houkou||0):1;
+  atk.sort((a,b)=>pw(b)-pw(a));
+  let tenLeft=ten.slice();const cap=maxUnits(me);
+  const room=()=>units.length<cap;
+  // 今の自分の領土（このあとの天翔使いで増える）
+  const ownNow=()=>{const r=cpuSimInv(g,me,isl,units);return r.owner};
+  const pairFor=(i,own)=>{const r=Math.floor(i/8),c=i%8;let best=null,bv=-1;
+    for(const [a,b] of [[r-1,c],[r+1,c],[r,c-1],[r,c+1]]){if(!inB(a,b))continue;const j=idx(a,b);if(blocked(j))continue;
+      let v=own[j]!==me.id&&!isl.flags[j]?2:0;if(a>r)v+=0.5;if(v>bv){bv=v;best=[a,b]}}return best};
+  for(const a of atk){
+    if(!room())break;
+    const own=ownNow();let best=null,bv=mustAll?-1e9:(s?150:400);
+    const sq=[];for(let i=0;i<64;i++)sq.push(i);
+    const cand=s?sq:shuffleM(sq).slice(0,32);
+    for(const i of cand){
+      const r=Math.floor(i/8),c=i%8;let add=[];
+      if(own[i]!==me.id){
+        if(!tenLeft.length||blocked(i)||units.length+2>cap)continue;
+        if(!(isl.owner[i]!==me.id&&!alive(isl.grid[i])&&!isl.flags[i]))continue;
+        const pr=pairFor(i,own);if(!pr)continue;
+        add.push({type:"tenshou",base:tenLeft[0].base,r,c,r2:pr[0],c2:pr[1]});
+      }
+      const u=a.type==="ryuou"?{type:"ryuou",id:a.id,r,c}:{type:"ryukishi",base:a.base,r,c};
+      const v=val([...units,...add,u])-cur-(add.length?250:0);
+      if(v>bv){bv=v;best={add,u}}
+    }
+    if(!best)continue;
+    if(best.add.length){units.push(best.add[0]);tenLeft.shift()}
+    units.push(best.u);cur=val(units);
+  }
+  // 強い：置いた攻撃役を1体ずつ、ほかの足場へ動かしてみて、良くなるなら動かす（2回まで）
+  if(s){for(let pass=0;pass<2;pass++){let improved=false;
+    for(let k=0;k<units.length;k++){const u=units[k];if(u.type!=="ryukishi"&&u.type!=="ryuou")continue;
+      const own=cpuSimInv(g,me,isl,units).owner;let best=null,bv=cur;
+      for(let i=0;i<64;i++){if(own[i]!==me.id)continue;const r=Math.floor(i/8),c=i%8;if(r===u.r&&c===u.c)continue;
+        const trial=units.slice();trial[k]={...u,r,c};const v=val(trial);if(v>bv+1){bv=v;best=trial}}
+      if(best){units.splice(0,units.length,...best);cur=bv;improved=true}}
+    if(!improved)break}}
+  // 残った天翔使い：領土を取る（強い：次のターンの足場になる場所を選ぶ）
+  for(const tn of tenLeft.slice()){
+    if(!room()&&!mustAll)break;
+    const own=ownNow();let best=null,bv=mustAll?-1e9:(s?600:900);
+    for(let i=0;i<64;i++){if(blocked(i))continue;const r=Math.floor(i/8),c=i%8;
+      for(const [a,b] of [[r+1,c],[r,c+1]]){if(!inB(a,b))continue;const j=idx(a,b);if(blocked(j))continue;
+        const u={type:"tenshou",base:tn.base,r,c,r2:a,c2:b};let v=val([...units,u])-cur;
+        if(s){for(const k of [i,j]){const kr=Math.floor(k/8),kc=k%8;for(const x of rangeOf(kr,kc,+1))if(alive(isl.grid[x])&&isl.grid[x].opened!==false)v+=120}}
+        if(v>bv){bv=v;best=u}}}
+    if(best){units.push(best);tenLeft.shift();cur=val(units)}
+  }
+  // 空賊：旗を立てる（相手が取り返しにくいマス）
+  for(const k of kz){
+    if(!room()&&!mustAll)break;
+    const own=ownNow();let best=null,bv=mustAll?-1e9:(s?700:900);
+    for(let i=0;i<64;i++){
+      const u={type:"kuzoku",base:k.base,r:Math.floor(i/8),c:i%8};let v=val([...units,u])-cur;
+      if(own[i]===me.id&&!isl.flags[i]){const r=Math.floor(i/8),c=i%8;let th=0;for(const [a,b] of [[r+1,c-1],[r+1,c],[r+1,c+1],[r,c-1],[r,c+1]])if(inB(a,b)&&own[idx(a,b)]===isl.id)th++;v-=th*(s?250:100)}
+      if(v>bv){bv=v;best=u}}
+    if(best){units.push(best);cur=val(units)}
+  }
+  // 編成どおり全員置く必要があるとき：置けなかったキャラを、害のない場所に置く
+  if(mustAll){
+    const placed=units.map(u=>u.type==="ryuou"?"K"+u.id:u.base+"|"+u.type);
+    for(const a of avail){const key=a.type==="ryuou"?"K"+a.id:a.base+"|"+a.type;const ix=placed.indexOf(key);if(ix>=0){placed.splice(ix,1);continue}
+      if(a.type==="tenshou"){let done=false;for(let i=0;i<64&&!done;i++){const r=Math.floor(i/8),c=i%8;if(blocked(i)||c===7)continue;if(blocked(idx(r,c+1)))continue;units.push({type:"tenshou",base:a.base,r,c,r2:r,c2:c+1});done=true}}
+      else if(a.type==="ryuou")units.push({type:"ryuou",id:a.id,r:0,c:0});
+      else units.push({type:a.type,base:a.base,r:0,c:0});}
+  }
+  const r=cpuSimInv(g,me,isl,units);
+  return {units,my:r.my,opp:r.opp,value:r.my+r.opp*W};
+}
+/* 相手に与える損の重み：2人なら相手の損はそのまま自分の得。強いCPUは首位をより強く狙う */
+function cpuOppW(g,me,isl){
+  const n=g.players.length;let w=n<=2?1:1/(n-1);
+  if(cpuStrong(me)){const sc=g.players.map(q=>({id:q.id,t:score(g,q).total})).sort((a,b)=>b.t-a.t);
+    const lead=sc.find(x=>x.id!==me.id);if(lead&&lead.id===isl.id&&n>2)w*=1.8;
+    if(score(g,isl).total>score(g,me).total)w*=1.2}
+  return w;
+}
+function cpuAvail(g,me){
+  const out=[];for(const [k,n] of Object.entries(usableByBase(me,g.turn))){const [b,t]=k.split("|");for(let i=0;i<n;i++)out.push({type:t,base:b})}
+  for(const c of me.chars)if(c.type==="ryuou"&&charUsable(me,c,g.turn))out.push({type:"ryuou",id:c.id});
+  // 天翔使いは3体まで
+  let tn=0;return out.filter(u=>u.type!=="tenshou"||++tn<=3);
+}
+function cpuBestInvasion(g,me){
+  if(actionBlocked(g,me,"invade"))return null;
+  const av=cpuAvail(g,me);let best=null;
+  for(const isl of cpuOpp(g,me)){
+    if(isl.sealedTurn===g.turn||isAlly(g,me.id,isl.id))continue;
+    const pl=cpuPlanInv(g,me,isl,av,false);if(!pl.units.length)continue;
+    const v=cpuNoise(me,pl.value)-1000-pl.units.length*120;
+    if(!best||v>best.v)best={v,target:isl.id,plan:pl};
+  }
+  return best;
+}
+function squadOf(units){const sq={sel:{},kings:[]};for(const u of units){if(u.type==="ryuou")sq.kings.push(u.id);else{const k=u.base+"|"+u.type;sq.sel[k]=(sq.sel[k]||0)+1}}return sq}
+
+/* ---------- 奪還の計画 ---------- */
+function cpuPlanRetake(g,p){
+  const av=cpuAvail(g,p).concat([]);const cap=maxUnits(p);const units=[];
+  const flags=p.flags.slice();const owner=p.owner.slice();
+  let v=0;
+  // 空賊：旗のマスに置いて旗を抜く
+  for(const k of av.filter(u=>u.type==="kuzoku")){if(units.length>=cap)break;const i=flags.findIndex(f=>f&&f!==p.id);if(i<0)break;flags[i]=null;v+=2*CPU_PT+300;units.push({type:"kuzoku",base:k.base,r:Math.floor(i/8),c:i%8})}
+  // 竜騎士・竜騎士王：範囲の旗を壊す（自分の領土に立つ。奪還は前＝1列目方向）
+  for(const a of av.filter(u=>u.type==="ryukishi"||u.type==="ryuou")){
+    if(units.length>=cap)break;let best=null,bv=0;
+    const up=a.type==="ryuou"?((p.chars.find(c=>c.id===a.id)||{}).up||{}):{};
+    for(let i=0;i<64;i++){if(owner[i]!==p.id)continue;const r=Math.floor(i/8),c=i%8;const rg=a.type==="ryuou"?kingRange(r,c,-1,up.shinsou||0):rangeOf(r,c,-1);
+      let n=0;for(const j of rg)if(flags[j]&&flags[j]!==p.id)n++;
+      let tk=0;if(up.kamui)for(const j of rg)if(owner[j]!==p.id&&!flags[j])tk++;
+      const val=n*(2*CPU_PT+300)+tk*CPU_PT;if(val>bv){bv=val;best={i,rg}}}
+    if(!best)continue;
+    for(const j of best.rg){if(flags[j]&&flags[j]!==p.id)flags[j]=null;if(up.kamui&&owner[j]!==p.id&&!flags[j])owner[j]=p.id}
+    v+=bv;const r=Math.floor(best.i/8),c=best.i%8;units.push(a.type==="ryuou"?{type:"ryuou",id:a.id,r,c}:{type:"ryukishi",base:a.base,r,c});
+  }
+  // 天翔使い：取られたマスを2つずつ取り返す
+  for(const tn of av.filter(u=>u.type==="tenshou")){
+    if(units.length>=cap)break;let best=null,bv=0;
+    for(let i=0;i<64;i++){const r=Math.floor(i/8),c=i%8;for(const [a,b] of [[r+1,c],[r,c+1]]){if(!inB(a,b))continue;const j=idx(a,b);
+      let n=0;for(const k of [i,j])if(owner[k]!==p.id&&!flags[k]){n++;
+        // 建物の近くの敵の足場ほど危ない
+        const kr=Math.floor(k/8),kc=k%8;for(const x of rangeOf(kr,kc,+1))if(alive(p.grid[x]))n+=0.3}
+      if(n>bv){bv=n;best={r,c,r2:a,c2:b}}}}
+    if(!best)break;
+    for(const k of [idx(best.r,best.c),idx(best.r2,best.c2)])if(owner[k]!==p.id&&!flags[k])owner[k]=p.id;
+    v+=bv*CPU_PT*(g.players.length<=2?1.2:0.9);units.push({type:"tenshou",base:tn.base,...best});
+  }
+  return {units,value:v};
+}
+
+/* ---------- アクションの選択 ---------- */
+function cpuChoose(g,p){
+  if(p.sealedTurn===g.turn)return "build";
+  const s=cpuStrong(p);
+  const opts=[];
+  const labor=1500+(g.turn<=10?400:0);
+  opts.push({act:"labor",v:labor});
+  const bp=cpuBuildPlan(g,p,p.money,p.res);
+  const goal=cpuGoal(g,p);if(goal&&g.turn<TOTAL_TURNS&&bp.total<goal.v*0.5)opts[0].v+=goal.v*0.25;
+  // 建設は「まとめて建てる」ほうが得：1つだけなら、価値が十分なときだけ
+  let bv=bp.total;if(bp.acts.length===1&&g.turn<TOTAL_TURNS)bv*=0.85;
+  if(g.turn===TOTAL_TURNS)bv*=1.2;
+  if(g.turn>=13)bv+=Math.max(0,p.money-6000)*(g.turn>=18?0.6:0.25);
+  opts.push({act:"build",v:bv});
+  if(g.turn>INSPECT_AFTER){
+    const inv=cpuBestInvasion(g,p);if(inv){opts.push({act:"invade",v:inv.v,inv});}
+    if(!actionBlocked(g,p,"retake")){const rt=cpuPlanRetake(g,p);if(rt.units.length)opts.push({act:"retake",v:rt.value-200*rt.units.length})}
+  }
+  opts.forEach(o=>{if(!s)o.v*=0.85+0.3*cpuR()});
+  opts.sort((a,b)=>b.v-a.v);
+  for(const o of opts)if(!actionBlocked(g,p,o.act)){if(o.act==="invade")(S.cpuMem=S.cpuMem||{})[p.id]={turn:g.turn,target:o.inv.target};return o.act}
+  return "labor";
+}
+
+/* ---------- 1手ずつ決める ---------- */
+function cpuDecide(g,p){
+  if(g.phase==="setup")return p.setupDone?null:cpuPlaceKing(g,p);
+  if(g.phase==="inspect")return p.inspectDone?null:{kind:"inspectDone"};
+  if(g.phase!=="turn")return null;
+  const ts=p.ts;
+  if(g.sub==="prep"){
+    if(ts.stage==="decided")return null;
+    if(ts.stage==="move")return cpuKingMove(g,p);
+    const sell=cpuSell(g,p);if(sell)return sell;
+    if(ts.stage==="gen"){const a=cpuGen(g,p);return a||{kind:"genNext"}}
+    if(ts.stage==="choose")return {kind:"choose",action:cpuChoose(g,p)};
+    return null;
+  }
+  if(g.sub==="invade"){
+    if(ts.action!=="invade")return null;
+    if(g.invStage==="squad"){
+      if(ts.squadDone)return null;
+      const mem=(S.cpuMem||{})[p.id];let target=mem&&mem.turn===g.turn?mem.target:null;
+      const av=cpuAvail(g,p);
+      if(!target||P_OF(g,target).sealedTurn===g.turn){const b=cpuBestInvasion(g,p);target=b&&b.target}
+      if(!target)return {kind:"cancelInvade"};
+      const pl=cpuPlanInv(g,p,P_OF(g,target),av,false);
+      if(!pl.units.length)return {kind:"cancelInvade"};
+      return {kind:"squad",target,squad:squadOf(pl.units)};
+    }
+    const q=g.invQ[ts.target]||[];if(q[0]!==p.id)return null;
+    const nq=normSquad(ts.squad);const fixed=[];
+    for(const [k,n] of Object.entries(nq.sel)){const [b,t]=k.split("|");for(let i=0;i<n;i++)fixed.push({type:t,base:b})}
+    for(const id of nq.kings)fixed.push({type:"ryuou",id});
+    const pl=cpuPlanInv(g,p,P_OF(g,ts.target),fixed,true);
+    return {kind:"plan",plan:{units:pl.units}};
+  }
+  if(g.sub==="build"){
+    if(ts.action!=="build"||ts.buildDone)return null;
+    const bp=cpuBuildPlan(g,p,p.money,p.res,1);
+    if(bp.acts.length)return bp.acts[0];
+    const sell=cpuSell(g,p);if(sell)return sell;
+    return {kind:"buildDone"};
+  }
+  if(g.sub==="retake"){
+    if(ts.action!=="retake"||ts.planDone)return null;
+    return {kind:"plan",plan:{units:cpuPlanRetake(g,p).units}};
+  }
+  if(g.sub==="repair"){
+    if(!ts.repairAsk||ts.repairDone)return null;
+    for(const i of freshRuins(g,p)){const b=p.grid[i];if(b.repairUntil)continue;const rc=cpuRepairCost(g,p,b);if(!rc||!canAfford(p,rc.cost))continue;
+      const v=cpuRepairValue(g,p,i,rc.dur);const c=rc.cost.money+Object.values(rc.cost.res).reduce((a,b)=>a+b,0)*CPU_RES;
+      if(cpuNoise(p,v)>c*(cpuStrong(p)?1.0:1.3))return {kind:"repair",i}}
+    return {kind:"repairDone"};
+  }
+  return null;
+}
+/* CPUを1手進める。進めたらtrue。うまく決められなかったときは「代わりに進める」で止まらないようにする */
+function cpuStepOnce(g){
+  const ids=g.players.filter(isCpu).map(p=>p.id);if(!ids.length)return false;
+  for(const id of ids){
+    const p=P_OF(g,id);let a=null;
+    try{a=cpuDecide(g,p)}catch(e){console.error("CPU",e);a=null;if(pendingIds(g).includes(id)){safeApply(g,id,null,()=>proxyAct(g,id));return true}}
+    if(!a)continue;
+    const err=safeApply(g,id,a);
+    if(err){
+      S.cpuErr=(S.cpuErr||0)+1;console.warn("CPU",p.name,a,err);
+      if(pendingIds(g).includes(id)){safeApply(g,id,null,()=>proxyAct(g,id))}
+      else if(a.kind==="sell"){(S.cpuNoSell=S.cpuNoSell||{})[id]=phaseKey(g)}
+    }
+    return true;
+  }
+  return false;
+}
+
+/* CPUの自動進行：部屋を作った人・1台モードの画面で、少しずつ（1手ずつ）進める */
+const CPU_DELAY=150;
+function cpuSchedule(){
+  if(S.mode!=="host"&&S.mode!=="local")return;const g=S.game;
+  if(!g||S.cpuTimer||!g.players.some(isCpu))return;
+  S.cpuTimer=setTimeout(()=>{S.cpuTimer=null;const g=S.game;if(!g)return;let moved=false;
+    try{moved=cpuStepOnce(g)}catch(e){console.error(e)}
+    if(moved){if(S.mode==="local"){try{localStorage.setItem("ukishima_local",JSON.stringify(g))}catch(e){}}broadcast()}},CPU_DELAY);
+}
+/* テスト用：CPUだけで最後まで一気に進める（画面の更新なし） */
+function cpuRunAll(g,maxSteps){let n=0;while(n<(maxSteps||200000)&&cpuStepOnce(g))n++;return n}
+function freePid(g){for(let i=1;i<=6;i++)if(!g.players.some(p=>p.id==="P"+i))return "P"+i;return null}
+function addCpu(g,level){
+  if(g.phase!=="lobby"||g.players.length>=6)return "これ以上追加できません（最大6人）";
+  const id=freePid(g);const used=g.players.map(q=>q.name).join("|");const nm=CPU_NAMES.find(x=>!used.includes(x))||CPU_NAMES[0];
+  const p=newPlayer(id,`CPU${nm}（${CPU_JA[level]}）`.slice(0,14));p.cpu=level;p.connected=true;
+  g.players.push(p);return null;
+}
+function removeCpu(g,id){const p=P_OF(g,id);if(g.phase!=="lobby"||!isCpu(p))return "外せません";g.players=g.players.filter(q=>q.id!==id);return null}
 
 /* ================= 画面 ================= */
 function renderMsg(m,isErr){
@@ -1508,12 +2047,14 @@ function renderTitle(){
     <h2 style="margin-top:0">1台で遊ぶ（ルール確認用）</h2>
     <div class="sub">通信なしで、1つの画面で全員を切り替えながら操作します。</div>
     <div class="row" style="margin-top:8px"><select id="lnum">${[2,3,4,5,6].map(n=>`<option ${n===3?"selected":""}>${n}</option>`).join("")}</select><span>人</span>
-    <select id="lrounds"><option value="1">1ラウンド</option><option value="2">2ラウンド</option></select><button class="primary" id="blocal">始める</button>${hasLocal?`<button id="blocalres">続きから</button>`:""}</div>
+    <select id="lrounds"><option value="1">1ラウンド</option><option value="2">2ラウンド</option></select></div>
+    <div class="row" style="margin-top:6px"><span>うちCPU</span><select id="lcpu">${[0,1,2,3,4,5].map(n=>`<option value="${n}">${n}人</option>`).join("")}</select><select id="lcpulv"><option value="normal">普通</option><option value="strong">強い</option><option value="mix">普通と強いを交互</option></select><button class="primary" id="blocal">始める</button>${hasLocal?`<button id="blocalres">続きから</button>`:""}</div>
   </div>`;
   $("#bjoin").onclick=()=>{const n=$("#jname").value.trim(),c=$("#jcode").value.trim().toUpperCase();if(!n||c.length!==5){toast("名前と5文字の部屋番号を入れてください");return}guestJoin(c,n)};
   $("#bhost").onclick=()=>{const n=$("#hname").value.trim();if(!n){toast("名前を入れてください");return}hostCreate(n)};
   if($("#bresume"))$("#bresume").onclick=()=>hostCreate(null,lastHost);
-  $("#blocal").onclick=()=>{const n=+$("#lnum").value;localStart(Array.from({length:n},(_,i)=>"P"+(i+1)),+$("#lrounds").value)};
+  $("#blocal").onclick=()=>{const n=+$("#lnum").value;const k=Math.min(n-1,+$("#lcpu").value);const lv=$("#lcpulv").value;
+    localStart(Array.from({length:n-k},(_,i)=>"P"+(i+1)),+$("#lrounds").value,Array.from({length:k},(_,i)=>lv==="mix"?(i%2?"strong":"normal"):lv))};
   if($("#blocalres"))$("#blocalres").onclick=()=>{S.mode="local";S.code="LOCAL";S.game=JSON.parse(localStorage.getItem("ukishima_local"));S.seat="P1";broadcast()};
 }
 
@@ -1530,10 +2071,11 @@ function render(){
   }
   if(S.lost)h+=`<div class="panel" style="border-color:var(--warn)">接続が切れました。<button class="primary" id="brecon">再接続</button></div>`;
   else if(S.stale)h+=`<div class="panel" style="border-color:var(--warn)"><b>部屋を作った人の画面と通信できていません。</b><div class="sub">作った人の画面が閉じている・スリープしている・別のアプリに切り替わっている可能性があります。作った人は画面を開き直してください（再読み込みした場合は、タイトル画面の「前回の部屋を再開」）。自動で再接続を試しています。</div><div class="row" style="margin-top:6px"><button class="primary" id="brecon">今すぐ再接続</button></div></div>`;
-  if(S.mode==="host"&&v.pending&&v.pending.some(id=>id!==S.seat)){
-    h+=`<details class="panel proxy"><summary>待っている人：${v.pending.filter(id=>id!==S.seat).map(id=>{const o=(v.lobby||[]).find(x=>x.id===id);return esc(pname(id))+(o&&!o.connected?"（切断中）":"")}).join("・")}</summary>
+  const cpuIds=new Set((v.lobby||[]).filter(x=>x.cpu).map(x=>x.id));
+  if(S.mode==="host"&&v.pending&&v.pending.some(id=>id!==S.seat&&!cpuIds.has(id))){
+    h+=`<details class="panel proxy"><summary>待っている人：${v.pending.filter(id=>id!==S.seat&&!cpuIds.has(id)).map(id=>{const o=(v.lobby||[]).find(x=>x.id===id);return esc(pname(id))+(o&&!o.connected?"（切断中）":"")}).join("・")}</summary>
       <div class="sub">スマホがスリープしたなどで進まないときは、代わりに1段階進められます（アクション選択なら労働、建設フェーズなら建設を終える、侵略なら取りやめて遠征コストを返金、など）。</div>
-      <div class="row" style="margin-top:6px">${v.pending.filter(id=>id!==S.seat).map(id=>`<button data-proxy="${id}">${esc(pname(id))}の代わりに進める</button>`).join("")}</div></details>`;
+      <div class="row" style="margin-top:6px">${v.pending.filter(id=>id!==S.seat&&!cpuIds.has(id)).map(id=>`<button data-proxy="${id}">${esc(pname(id))}の代わりに進める</button>`).join("")}</div></details>`;
   }
   if(S.mode==="host"&&v.phase!=="lobby"&&v.phase!=="result"){
     const errN=(S.game.errors||[]).length;
@@ -1554,7 +2096,9 @@ function renderLobby(v){
   let h=`<div class="panel"><h2 style="margin-top:0">参加者を待っています</h2>`;
   if(S.mode==="host")h+=`<div>部屋番号 <b style="font-size:22px;letter-spacing:2px">${esc(S.code)}</b></div>
     <div class="sub">友達にはこのリンクを送ってください</div><div class="row"><input readonly value="${esc(url)}" class="grow" id="shareurl"><button id="bcopy">コピー</button></div>`;
-  h+=`<ul>${v.lobby.map(p=>`<li>${esc(p.name)}${p.id===S.seat?"（あなた）":""}${p.connected?"":" <span class='pill'>切断中</span>"}</li>`).join("")}</ul>`;
+  h+=`<ul>${v.lobby.map(p=>`<li>${p.cpu?"🤖 ":""}${esc(p.name)}${p.id===S.seat?"（あなた）":""}${p.connected?"":" <span class='pill'>切断中</span>"}${p.cpu&&S.mode==="host"?` <button class="mini" data-rmcpu="${p.id}">外す</button>`:""}</li>`).join("")}</ul>`;
+  if(S.mode==="host")h+=`<div class="row" style="margin:6px 0"><button data-addcpu="normal" ${v.lobby.length>=6?"disabled":""}>🤖 CPUを追加（普通）</button><button data-addcpu="strong" ${v.lobby.length>=6?"disabled":""}>🤖 CPUを追加（強い）</button></div>
+    <div class="sub">CPUは部屋を作った人の画面で動きます（作った人の画面を閉じないでください）。普通：適度に考えて動く／強い：先を読んで、ほぼ最善の手を選ぶ</div>`;
   h+=`<div class="row" style="margin:8px 0"><span>ラウンド数：</span>${S.mode==="host"?[1,2].map(n=>`<button data-rounds="${n}" class="${v.rounds===n?"on primary":""}">${n}ラウンド</button>`).join(""):`<b>${v.rounds}ラウンド</b>`}</div><div class="sub">2ラウンド制では、2ラウンド目の11ターン目に覚醒が発生することがあり、覚醒していない人も1ラウンド目の順位に応じて12〜14ターン目から空賊基地をLv4にできます（覚醒がなければ全員11ターン目から）。</div>`;
   if(S.mode==="host")h+=`<button class="primary" id="bstart" ${v.lobby.length<2?"disabled":""}>この${v.lobby.length}人で始める</button><div class="sub">2〜6人で始められます</div>`;
   else h+=`<div class="sub">部屋を作った人が開始するまでお待ちください。</div>`;
@@ -2044,6 +2588,8 @@ function bind(){
   document.querySelectorAll("[data-allyyes]").forEach(b=>b.onclick=()=>doAct({kind:"allyAnswer",yes:b.dataset.allyyes==="1"}));
   document.querySelectorAll("[data-allypick]").forEach(b=>b.onclick=()=>doAct({kind:"allyPick",target:b.dataset.allypick}));
   document.querySelectorAll("[data-rounds]").forEach(b=>b.onclick=()=>{S.game.rounds=+b.dataset.rounds;broadcast()});
+  document.querySelectorAll("[data-addcpu]").forEach(b=>b.onclick=()=>{const e=addCpu(S.game,b.dataset.addcpu);if(e)toast(e);broadcast()});
+  document.querySelectorAll("[data-rmcpu]").forEach(b=>b.onclick=()=>{const e=removeCpu(S.game,b.dataset.rmcpu);if(e)toast(e);broadcast()});
   on("bnext",()=>doAct({kind:"nextRound"}));
   document.querySelectorAll("[data-proxy]").forEach(b=>b.onclick=()=>{const id=b.dataset.proxy;if(!confirm(`${pname(id)}の代わりに進めますか？`))return;const err=safeApply(S.game,id,null,()=>proxyAct(S.game,id));if(err)toast(err);broadcast()});
   on("bcsv",downloadCSV);
