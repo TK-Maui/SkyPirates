@@ -125,29 +125,21 @@ dialog.rules{width:760px;max-width:96vw;height:90vh;padding:0}
 .rules .rbody hr{border:none;border-top:1px dashed var(--line);margin:18px 0}
 dialog::backdrop{background:rgba(0,0,0,.4)}
 
-/* 労働のサイコロ演出 */
-.diceov{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(10,16,28,.55);animation:dfade .25s ease-out}
+/* 労働のルーレット演出 */
+.diceov{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:rgba(10,16,28,.72);animation:dfade .25s ease-out}
 .diceov.out{animation:dfadeout .35s ease-in forwards}
 @keyframes dfade{from{opacity:0}to{opacity:1}}
 @keyframes dfadeout{to{opacity:0}}
-.dscene{width:110px;height:110px;perspective:520px}
-.dcube{width:110px;height:110px;position:relative;transform-style:preserve-3d;transition:transform 1.5s cubic-bezier(.17,.84,.32,1.08)}
-.dface{position:absolute;inset:0;border-radius:18px;background:#fffdf6;border:2px solid #d9cfb8;box-shadow:inset 0 0 14px rgba(0,0,0,.12);display:grid;grid-template:repeat(3,1fr)/repeat(3,1fr);padding:14px;box-sizing:border-box}
-.dface i{width:20px;height:20px;border-radius:50%;background:#1b2430;align-self:center;justify-self:center}
-.dface.f1 i{background:#c2410c;width:26px;height:26px}
-.dface.f1{transform:rotateY(0deg) translateZ(55px)}
-.dface.f2{transform:rotateY(90deg) translateZ(55px)}
-.dface.f3{transform:rotateX(90deg) translateZ(55px)}
-.dface.f4{transform:rotateX(-90deg) translateZ(55px)}
-.dface.f5{transform:rotateY(-90deg) translateZ(55px)}
-.dface.f6{transform:rotateY(180deg) translateZ(55px)}
-.dshadow{width:90px;height:14px;border-radius:50%;background:rgba(0,0,0,.35);filter:blur(4px);margin-top:-6px}
+.rwrap{position:relative;width:230px;height:230px}
+.rwheel{width:230px;height:230px;transition:transform 2s cubic-bezier(.12,.75,.2,1);filter:drop-shadow(0 6px 14px rgba(0,0,0,.35))}
+.rpin{position:absolute;left:50%;top:-6px;transform:translateX(-50%);width:0;height:0;border-left:13px solid transparent;border-right:13px solid transparent;border-top:24px solid #c2410c;filter:drop-shadow(0 2px 2px rgba(0,0,0,.4));z-index:2}
+.rhub{position:absolute;left:50%;top:50%;width:34px;height:34px;margin:-17px 0 0 -17px;border-radius:50%;background:#1b2430;border:4px solid #fffdf6}
 .dres{color:#fff;font-size:22px;font-weight:700;text-align:center;opacity:0;transform:translateY(8px);transition:all .35s ease-out;text-shadow:0 2px 6px rgba(0,0,0,.5)}
 .dres.on{opacity:1;transform:none}
 .dres small{display:block;font-size:14px;font-weight:400;margin-top:4px}
-.diceov .dhop{animation:dhop 1.5s cubic-bezier(.3,.6,.4,1)}
-@keyframes dhop{0%{transform:translateY(-120px)}35%{transform:translateY(0)}50%{transform:translateY(-38px)}70%{transform:translateY(0)}82%{transform:translateY(-10px)}100%{transform:translateY(0)}}
-@media (prefers-reduced-motion: reduce){.dcube{transition:none}.diceov .dhop{animation:none}}
+.rwin{animation:rwin .6s ease-out 2}
+@keyframes rwin{50%{opacity:.35}}
+@media (prefers-reduced-motion: reduce){.rwheel{transition-duration:.3s}}
 </style>
 </head>
 <body>
@@ -157,7 +149,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v1.1.1（2026/11/25版：労働でサイコロの演出・CPU対戦（普通・強い）を追加・侵略の編成画面で取りやめられる・侵略できる島がないときは侵略を選べない・部屋を作った人は前のフェーズに戻せる（テスト用）・空賊基地Lv4は1ラウンド目の順位で11〜14ターン目から・2人でも覚醒・行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v1.1.2（2026/11/25版：労働でルーレットの演出・CPU対戦（普通・強い）を追加・侵略の編成画面で取りやめられる・侵略できる島がないときは侵略を選べない・部屋を作った人は前のフェーズに戻せる（テスト用）・空賊基地Lv4は1ラウンド目の順位で11〜14ターン目から・2人でも覚醒・行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -2643,23 +2635,30 @@ render();
 if(new URLSearchParams(location.search).get("room")){setTimeout(()=>{const n=$("#jname");if(n&&!n.value)n.focus()},0)}
 window.__S=S; // テスト用
 
-/* ---------- 労働のサイコロ演出（自分の労働の結果が出たときに1回だけ） ---------- */
-const DICE_PIPS={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
-const DICE_ROT={1:[0,0],2:[0,-90],3:[-90,0],4:[90,0],5:[0,90],6:[0,180]};
+/* ---------- 労働のルーレット演出（自分の労働の結果が出たときに1回だけ） ---------- */
+const RL_COLORS=["#f2c14e","#e76f51","#2a9d8f","#4d8fdb","#9b6bd3","#f4a261","#43aa8b","#5c7cfa"];
 function showDice(roll,gain){
   document.querySelector(".diceov")?.remove();
+  const n=ROULETTE.length,seg=360/n,R=110,C=115;
+  const pt=(deg,r)=>{const a=(deg-90)*Math.PI/180;return [C+r*Math.cos(a),C+r*Math.sin(a)]};
+  let svg=`<svg class="rwheel" viewBox="0 0 230 230">`;
+  ROULETTE.forEach((v,k)=>{const [x1,y1]=pt(k*seg,R),[x2,y2]=pt((k+1)*seg,R),[tx,ty]=pt((k+.5)*seg,R*.68);
+    svg+=`<path ${""}data-k="${k}" d="M${C},${C} L${x1},${y1} A${R},${R} 0 0 1 ${x2},${y2} Z" fill="${RL_COLORS[k%RL_COLORS.length]}" stroke="#fffdf6" stroke-width="3"/>`+
+      `<text x="${tx}" y="${ty}" text-anchor="middle" dominant-baseline="central" font-size="30" font-weight="700" fill="#fff" stroke="rgba(0,0,0,.35)" stroke-width="1.2" transform="rotate(${(k+.5)*seg} ${tx} ${ty})">${v}</text>`});
+  svg+=`<circle cx="${C}" cy="${C}" r="${R}" fill="none" stroke="#fffdf6" stroke-width="5"/></svg>`;
   const ov=document.createElement("div");ov.className="diceov";
-  const face=n=>`<div class="dface f${n}">${Array.from({length:9},(_,k)=>DICE_PIPS[n].includes(k)?"<i></i>":"<span></span>").join("")}</div>`;
-  ov.innerHTML=`<div class="dhop"><div class="dscene"><div class="dcube">${[1,2,3,4,5,6].map(face).join("")}</div></div></div><div class="dshadow"></div>
-    <div class="dres">労働：出た目は ${roll} ！<small>${yen(gain)} を手に入れた</small></div>`;
+  ov.innerHTML=`<div class="rwrap"><div class="rpin"></div>${svg}<div class="rhub"></div></div>
+    <div class="dres">労働：ルーレット ${roll} ！<small>${yen(gain)} を手に入れた</small></div>`;
   document.body.appendChild(ov);
-  const cube=ov.querySelector(".dcube");const [x,y]=DICE_ROT[roll]||[0,0];
-  // まず適当に転がった向きから、出た目の向きへ
-  cube.style.transition="none";cube.style.transform=`rotateX(${200+Math.floor(Math.random()*160)}deg) rotateY(${-160-Math.floor(Math.random()*200)}deg)`;
-  requestAnimationFrame(()=>requestAnimationFrame(()=>{cube.style.transition="";cube.style.transform=`rotateX(${x+720}deg) rotateY(${y-720}deg)`}));
+  // 同じ数字のマスが2つあるときは、どちらかに止める
+  const ks=ROULETTE.map((v,k)=>v===roll?k:-1).filter(k=>k>=0);const k=ks[Math.floor(Math.random()*ks.length)]??0;
+  const jitter=(Math.random()-.5)*seg*.6;
+  const end=360*4+(360-(k+.5)*seg)+jitter;
+  const wheel=ov.querySelector(".rwheel");wheel.style.transform="rotate(0deg)";
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{wheel.style.transform=`rotate(${end}deg)`}));
   const close=()=>{if(!ov.isConnected)return;ov.classList.add("out");setTimeout(()=>ov.remove(),350)};
-  setTimeout(()=>ov.querySelector(".dres").classList.add("on"),1450);
-  setTimeout(close,3300);ov.onclick=close;
+  setTimeout(()=>{ov.querySelector(".dres").classList.add("on");const sl=ov.querySelector(`path[data-k="${k}"]`);if(sl)sl.classList.add("rwin")},2000);
+  setTimeout(close,3400);ov.onclick=close;
 }
 function maybeDice(){
   const v=S.view;const me=v&&v.me;const L=me&&me.lastLabor;if(!L||v.phase==="lobby")return;
