@@ -124,6 +124,30 @@ dialog.rules{width:760px;max-width:96vw;height:90vh;padding:0}
 .rules .rbody code{background:var(--bg);border-radius:4px;padding:0 3px}
 .rules .rbody hr{border:none;border-top:1px dashed var(--line);margin:18px 0}
 dialog::backdrop{background:rgba(0,0,0,.4)}
+
+/* 労働のサイコロ演出 */
+.diceov{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:rgba(10,16,28,.55);animation:dfade .25s ease-out}
+.diceov.out{animation:dfadeout .35s ease-in forwards}
+@keyframes dfade{from{opacity:0}to{opacity:1}}
+@keyframes dfadeout{to{opacity:0}}
+.dscene{width:110px;height:110px;perspective:520px}
+.dcube{width:110px;height:110px;position:relative;transform-style:preserve-3d;transition:transform 1.5s cubic-bezier(.17,.84,.32,1.08)}
+.dface{position:absolute;inset:0;border-radius:18px;background:#fffdf6;border:2px solid #d9cfb8;box-shadow:inset 0 0 14px rgba(0,0,0,.12);display:grid;grid-template:repeat(3,1fr)/repeat(3,1fr);padding:14px;box-sizing:border-box}
+.dface i{width:20px;height:20px;border-radius:50%;background:#1b2430;align-self:center;justify-self:center}
+.dface.f1 i{background:#c2410c;width:26px;height:26px}
+.dface.f1{transform:rotateY(0deg) translateZ(55px)}
+.dface.f2{transform:rotateY(90deg) translateZ(55px)}
+.dface.f3{transform:rotateX(90deg) translateZ(55px)}
+.dface.f4{transform:rotateX(-90deg) translateZ(55px)}
+.dface.f5{transform:rotateY(-90deg) translateZ(55px)}
+.dface.f6{transform:rotateY(180deg) translateZ(55px)}
+.dshadow{width:90px;height:14px;border-radius:50%;background:rgba(0,0,0,.35);filter:blur(4px);margin-top:-6px}
+.dres{color:#fff;font-size:22px;font-weight:700;text-align:center;opacity:0;transform:translateY(8px);transition:all .35s ease-out;text-shadow:0 2px 6px rgba(0,0,0,.5)}
+.dres.on{opacity:1;transform:none}
+.dres small{display:block;font-size:14px;font-weight:400;margin-top:4px}
+.diceov .dhop{animation:dhop 1.5s cubic-bezier(.3,.6,.4,1)}
+@keyframes dhop{0%{transform:translateY(-120px)}35%{transform:translateY(0)}50%{transform:translateY(-38px)}70%{transform:translateY(0)}82%{transform:translateY(-10px)}100%{transform:translateY(0)}}
+@media (prefers-reduced-motion: reduce){.dcube{transition:none}.diceov .dhop{animation:none}}
 </style>
 </head>
 <body>
@@ -133,7 +157,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v1.1.0（2026/11/24版：CPU対戦（普通・強い）を追加・侵略の編成画面で取りやめられる・侵略できる島がないときは侵略を選べない・部屋を作った人は前のフェーズに戻せる（テスト用）・空賊基地Lv4は1ラウンド目の順位で11〜14ターン目から・2人でも覚醒・行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v1.1.1（2026/11/25版：労働でサイコロの演出・CPU対戦（普通・強い）を追加・侵略の編成画面で取りやめられる・侵略できる島がないときは侵略を選べない・部屋を作った人は前のフェーズに戻せる（テスト用）・空賊基地Lv4は1ラウンド目の順位で11〜14ターン目から・2人でも覚醒・行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -913,7 +937,7 @@ function resolvePrep(g){
   for(const p of g.players){
     if(p.ts.action!=="labor")continue;
     const roll=ROULETTE[rnd(8)];const gain=roll*laborBase(p,g.turn);
-    p.money+=gain;p.ts.laborRoll=roll;p.ts.laborGain=gain;p.stats.laborMoney+=gain;
+    p.money+=gain;p.ts.laborRoll=roll;p.ts.laborGain=gain;p.stats.laborMoney+=gain;p.lastLabor={r:g.round,t:g.turn,roll,gain};
     logP(g,p,`労働フェーズ：ルーレット${roll} → +${yen(gain)}`);
   }
   if(g.players.some(p=>p.ts.action==="invade")){g.sub="invade";g.invStage="squad";g.invQ={};return}
@@ -2618,6 +2642,36 @@ function bind(){
 render();
 if(new URLSearchParams(location.search).get("room")){setTimeout(()=>{const n=$("#jname");if(n&&!n.value)n.focus()},0)}
 window.__S=S; // テスト用
+
+/* ---------- 労働のサイコロ演出（自分の労働の結果が出たときに1回だけ） ---------- */
+const DICE_PIPS={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+const DICE_ROT={1:[0,0],2:[0,-90],3:[-90,0],4:[90,0],5:[0,90],6:[0,180]};
+function showDice(roll,gain){
+  document.querySelector(".diceov")?.remove();
+  const ov=document.createElement("div");ov.className="diceov";
+  const face=n=>`<div class="dface f${n}">${Array.from({length:9},(_,k)=>DICE_PIPS[n].includes(k)?"<i></i>":"<span></span>").join("")}</div>`;
+  ov.innerHTML=`<div class="dhop"><div class="dscene"><div class="dcube">${[1,2,3,4,5,6].map(face).join("")}</div></div></div><div class="dshadow"></div>
+    <div class="dres">労働：出た目は ${roll} ！<small>${yen(gain)} を手に入れた</small></div>`;
+  document.body.appendChild(ov);
+  const cube=ov.querySelector(".dcube");const [x,y]=DICE_ROT[roll]||[0,0];
+  // まず適当に転がった向きから、出た目の向きへ
+  cube.style.transition="none";cube.style.transform=`rotateX(${200+Math.floor(Math.random()*160)}deg) rotateY(${-160-Math.floor(Math.random()*200)}deg)`;
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{cube.style.transition="";cube.style.transform=`rotateX(${x+720}deg) rotateY(${y-720}deg)`}));
+  const close=()=>{if(!ov.isConnected)return;ov.classList.add("out");setTimeout(()=>ov.remove(),350)};
+  setTimeout(()=>ov.querySelector(".dres").classList.add("on"),1450);
+  setTimeout(close,3300);ov.onclick=close;
+}
+function maybeDice(){
+  const v=S.view;const me=v&&v.me;const L=me&&me.lastLabor;if(!L||v.phase==="lobby")return;
+  // 少し前の結果（再読み込み・再接続したとき）は出さない
+  if(L.r!==(v.round||1)||v.turn-L.t>1)return;
+  const key=`${S.code||""}-${L.r}-${L.t}-${S.seat}`;S.diceShown=S.diceShown||{};
+  let ss=null;try{ss=sessionStorage.getItem("sp_dice")}catch(e){}
+  if(S.diceShown[key]||ss===key)return;S.diceShown[key]=1;try{sessionStorage.setItem("sp_dice",key)}catch(e){}
+  if(isCpu(me))return;
+  showDice(L.roll,L.gain);
+}
+const renderBase=render;render=function(){renderBase();try{maybeDice()}catch(e){console.error(e)}};
 </script>
 </body>
 </html>
