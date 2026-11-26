@@ -157,7 +157,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 <script>
 "use strict";
 /* ================= 定数 ================= */
-const VERSION = "v1.2.0（2026/11/25版：マスを長押しで耐久・得点・修繕を確認／得点の早見表／耐久はカウントダウン／2ラウンド目のお知らせ／天翔使いの2マス目は建物があってもOK／CPUを強化・労働でルーレットの演出・CPU対戦（普通・強い）を追加・侵略の編成画面で取りやめられる・侵略できる島がないときは侵略を選べない・部屋を作った人は前のフェーズに戻せる（テスト用）・空賊基地Lv4は1ラウンド目の順位で11〜14ターン目から・2人でも覚醒・行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
+const VERSION = "v1.2.1（2026/11/26版：CPUがランドマーク・空賊基地Lv3を確実に目指す・マスを長押しで耐久・得点・修繕を確認／得点の早見表／耐久はカウントダウン／2ラウンド目のお知らせ／天翔使いの2マス目は建物があってもOK／CPUを強化・労働でルーレットの演出・CPU対戦（普通・強い）を追加・侵略の編成画面で取りやめられる・侵略できる島がないときは侵略を選べない・部屋を作った人は前のフェーズに戻せる（テスト用）・空賊基地Lv4は1ラウンド目の順位で11〜14ターン目から・2人でも覚醒・行動の記録（リプレイ）を保存・同数で最多なら後から当てた人に得点・設定からルールブックが見られる・キングのいるマスにも建設可・同盟を廃止して覚醒だけに・Lv4の解放（2R14ターン目から）・フェーズの制限時間（設定で変更）・他の人の基地とキャラが見える・竜騎士王の攻撃回数を表示・奪還でキャラがいなくても終えられるよう修正・同盟・覚醒後に「建てる」が押せないことがある不具合を修正・編成後に狼煙の塔や基地が壊されても配置できるよう修正・直接つながらないときは中継サーバー経由でつなぐ・視察フェーズ以降に子の端末が止まる不具合を修正・参加し直すときに止まらないよう改善・建物の位置ボーナス（中央ほど高得点）・同じ島への侵略順は得点→マリー→抽選・キングが建物に止まるとボーナス・直前のマスに戻れない・1列目はA・B・G・Hだけ建設可・通信が止まったときの復帰・タイトル画像を背景に・得点一覧ボタン・労働は誰でも500マリー×目・天翔使いの選択制限・ターン終わりの修繕確認・売却所は建設で建て直し）";
 const RES = ["ishi","taku","hane","kumo","kome","mizu"];
 const RES_JA = {ishi:"石",taku:"タク",hane:"羽根",kumo:"雲",kome:"神米",mizu:"神水"};
 const RES_FULL = {ishi:"不思議な石",taku:"タクミニウム",hane:"光沢の羽根",kumo:"浮遊雲",kome:"神米",mizu:"神水"};
@@ -1546,10 +1546,11 @@ function cpuReserve(g,p){
   const add=(cost)=>{keep.money+=cost.money||0;for(const[k,v]of Object.entries(cost.res||{}))keep.res[k]=(keep.res[k]||0)+v};
   if(g.turn<=15&&!landmarkBuilt(p)){const lm=LM[p.landmarkId];add({money:0,res:lm.res})}
   if(g.round===2&&g.turn>=lv4Turn(g,p)-2&&!bases(p).some(({b})=>alive(b)&&b.level>=4))add({money:0,res:LV4_OPEN_COST.res});
+  const ms=cpuMilestone(g,p);if(ms&&!(ms.a.what==="landmark"))add({money:0,res:ms.cost.res||{}});
   const bs=bases(p).filter(({b})=>alive(b));
   if(g.turn>=4&&g.turn<=11&&bs.length&&baseMaxLv(p)<3){const b=bs.reduce((a,x)=>x.b.level>a.b.level?x:a).b;const c=baseUpCost(p,b);if(c)add({money:0,res:c.res})}
   // あふれそうな資材は残さない
-  const C=cap(p),inc=cpuIncome(p,g.turn+1);for(const r of Object.keys(keep.res))keep.res[r]=Math.max(0,Math.min(keep.res[r],C-inc[r]-4));
+  const C=cap(p);for(const r of Object.keys(keep.res))keep.res[r]=Math.max(0,Math.min(keep.res[r],C-2));
   return keep;
 }
 
@@ -1632,6 +1633,7 @@ function cpuGen(g,p){
   const want=cpuWant(g,p);const have=want.own;const keep=cpuReserve(g,p);
   /* 資材があふれそうなら、とっておく分を気にせずキャラに使う */
   const over=(()=>{const C=cap(p),inc=cpuIncome(p,t+1);return RES.some(r=>p.res[r]+inc[r]>C)})();
+  const lmKeep=!landmarkBuilt(p)&&t<=15?{money:0,res:{...LM[p.landmarkId].res}}:{money:0,res:{}};
   const lv4keep=g.round===2&&g.turn>=lv4Turn(g,p)-2&&!bases(p).some(({b})=>alive(b)&&b.level>=4)?{money:0,res:LV4_OPEN_COST.res}:{};
   const opts=[];
   for(const {b,i} of bases(p)){
@@ -1639,7 +1641,7 @@ function cpuGen(g,p){
     // 竜騎士王：完成まで3ターン。19ターン目までに完成するなら作る
     if(b.level>=4&&t+3<=TOTAL_TURNS){const c={money:0,res:CHARS.ryuou.res};if(canAfford(p,c))opts.push({v:9000+(TOTAL_TURNS-t)*300,a:{kind:"gen",i,char:"ryuou"}})}
     const kp={money:0,res:{...keep.res}};for(const[k,v]of Object.entries(lv4keep.res||{}))kp.res[k]=Math.max(kp.res[k]||0,v);
-    if(b.level>=3&&(have.ryukishi||0)<want.ryukishi&&t+1<=TOTAL_TURNS){const c={money:0,res:CHARS.ryukishi.res};if(cpuCanPay(p,c,over?{}:kp))opts.push({v:5200-(have.ryukishi||0)*250+(over?1500:0),a:{kind:"gen",i,char:"ryukishi"}})}
+    if(b.level>=3&&(have.ryukishi||0)<want.ryukishi&&t+1<=TOTAL_TURNS-(s&&p.money>=6000?2:0)){const c={money:0,res:CHARS.ryukishi.res};if(cpuCanPay(p,c,over?lmKeep:kp))opts.push({v:5200-(have.ryukishi||0)*250+(over?1500:0),a:{kind:"gen",i,char:"ryukishi"}})}
     if((have.tenshou||0)<want.tenshou+(over&&t>=8?2:0)){const c={money:0,res:CHARS.tenshou.res};if(cpuCanPay(p,c,kp))opts.push({v:4200-(have.tenshou||0)*500,a:{kind:"gen",i,char:"tenshou"}})}
     if(b.level>=2&&(have.kuzoku||0)<want.kuzoku+(over&&t>=8?2:0)){const c={money:0,res:CHARS.kuzoku.res};if(cpuCanPay(p,c,kp))opts.push({v:2500-(have.kuzoku||0)*600,a:{kind:"gen",i,char:"kuzoku"}})}
   }
@@ -1719,12 +1721,32 @@ function cpuRepairValue(g,p,i,dur){
   return v*(g.turn>=11?0.8:1);
 }
 /* 貯めてでも手に入れたい大物（ランドマーク・空賊基地Lv3・Lv4）。まだ買えないなら、それ以外にお金・資材を使いすぎない */
+/* 次に目指す大物（順番を決めて、確実に取りに行く）
+   1. ランドマークの条件を満たす（狼煙・金庫：基地Lv2／灯台：研究所2つ／城砦：資材倉庫）
+   2. ランドマークを建てる
+   3. 空賊基地をLv3にする（竜騎士）
+   強いCPUは、8ターン目を過ぎてもLv3がなければLv3を先にする */
+function cpuMilestone(g,p){
+  const t=g.turn,s=cpuStrong(p);const opts=cpuBuildOptions(g,p);const lm=LM[p.landmarkId];const lmB=landmarkBuilt(p);
+  const find=f=>opts.find(f)||null;
+  const upTo=lv=>{const bs=bases(p).filter(({b})=>alive(b)&&b.level<lv);if(!bs.length)return null;const best=bs.reduce((a,x)=>x.b.level>a.b.level?x:a);
+    return find(o=>o.a.kind==="upgrade"&&o.a.r===Math.floor(best.i/8)&&o.a.c===best.i%8)};
+  const steps=[];
+  const cond=()=>{if(lmB||lm.ok(p)||t>13)return null;
+    if(["noroshi","kinko"].includes(lm.id))return upTo(2);
+    if(lm.id==="toudai")return find(o=>o.a.kind==="build"&&o.a.what==="lab");
+    if(lm.id==="jousai")return find(o=>o.a.kind==="build"&&o.a.what==="warehouse");return null};
+  const land=()=>(!lmB&&lm.ok(p)&&t<=(s?15:14))?find(o=>o.a.kind==="build"&&o.a.what==="landmark"):null;
+  const lv3=()=>(baseMaxLv(p)<3&&t<=15)?upTo(3):null;
+  if(s&&t>=5&&baseMaxLv(p)<3)steps.push(lv3,cond,land);else steps.push(cond,land,lv3);
+  /* 資材が2ターンで集まらないものは飛ばして、次の目標へ（足踏みしない） */
+  const inc=cpuIncome(p,t+1);let first=null;
+  for(const f of steps){const o=f();if(!o)continue;first=first||o;
+    if(!Object.entries(o.cost.res||{}).some(([k,v])=>p.res[k]+inc[k]*2<v))return o}
+  return first;
+}
 function cpuGoal(g,p){
-  let best=null;
-  for(const o of cpuBuildOptions(g,p)){
-    const big=(o.a.kind==="build"&&o.a.what==="landmark")||(o.a.kind==="upgrade"&&(p.grid[idx(o.a.r,o.a.c)].level+1>=3||baseMaxLv(p)<2));
-    if(!big)continue;if(!best||o.v>best.v)best=o;
-  }
+  const best=cpuMilestone(g,p);
   if(!best||canAfford(p,best.cost))return null;
   // あと何ターンで買えそうか（労働1回で平均1,500マリー＋支給）
   const lackM=Math.max(0,best.cost.money-p.money);const inc=cpuIncome(p,g.turn+1);
@@ -1737,6 +1759,10 @@ function cpuBuildPlan(g,p,money,res,maxN){
   const opts=cpuBuildOptions(g,p);let m=money,r={...res};const used=new Set();let total=0,n=0;const acts=[];
   const keepMoney=g.turn>=10&&g.turn<TOTAL_TURNS?1000:0;
   const goal=cpuGoal(g,p);const gk=goal?JSON.stringify(goal.a):null;
+  const ms=cpuMilestone(g,p);
+  if(ms&&m-(ms.a.what==="landmark"?0:keepMoney)>=ms.cost.money&&!Object.entries(ms.cost.res||{}).some(([k,v])=>r[k]<v)){
+    acts.push(ms.a);total+=ms.v+3000;n++;m-=ms.cost.money;for(const[k,v]of Object.entries(ms.cost.res||{}))r[k]-=v;
+    used.add(ms.a.kind+(ms.a.what||"")+(ms.a.i!=null?ms.a.i:"")+(ms.a.r!=null?ms.a.r+"_"+ms.a.c:""));if(ms.a.kind==="build"){used.add("sq"+ms.a.r+"_"+ms.a.c);used.add("w"+ms.a.what)}}
   while(n<(maxN||6)){
     let best=null,bv=0;
     for(const o of opts){
@@ -1945,12 +1971,18 @@ function cpuChoose(g,p){
   let bv=bp.total;if(bp.acts.length===1&&g.turn<TOTAL_TURNS)bv*=0.85;
   if(g.turn===TOTAL_TURNS)bv*=1.2;
   if(g.turn>=13)bv+=Math.max(0,p.money-6000)*(g.turn>=18?0.6:0.25);
-  opts.push({act:"build",v:bv});
+  /* 強い：後半は、余ったお金を建物（得点）に変える。最終ターンはお金を残さない */
+  if(s&&g.turn>=12)bv+=Math.max(0,p.money-5000)*(g.turn>=16?0.5:0.3);
+  const lastBuild=s&&g.turn===TOTAL_TURNS&&p.money>=6000&&bp.acts.length>=3;
+  /* 大物（ランドマーク・Lv3）が今建てられるなら、何より先に建てる */
+  const ms=cpuMilestone(g,p);const msNow=ms&&canAfford(p,ms.cost)&&(ms.a.what==="landmark"||g.turn<=13);
+  opts.push({act:"build",v:bv,force:msNow||lastBuild});
   if(g.turn>INSPECT_AFTER){
     const inv=cpuBestInvasion(g,p);if(inv){opts.push({act:"invade",v:inv.v,inv});}
     if(!actionBlocked(g,p,"retake")){const rt=cpuPlanRetake(g,p);if(rt.units.length)opts.push({act:"retake",v:rt.value-200*rt.units.length})}
   }
   opts.forEach(o=>{if(!s)o.v*=0.85+0.3*cpuR()});
+  const fb=opts.find(o=>o.force);if(fb){const mx=Math.max(...opts.map(o=>o.v));fb.v=Math.max(fb.v,mx+1)}
   opts.sort((a,b)=>b.v-a.v);
   for(const o of opts)if(!actionBlocked(g,p,o.act)){if(o.act==="invade")(S.cpuMem=S.cpuMem||{})[p.id]={turn:g.turn,target:o.inv.target};return o.act}
   return "labor";
@@ -1966,6 +1998,11 @@ function cpuDecide(g,p){
     if(ts.stage==="decided")return null;
     if(ts.stage==="move")return cpuKingMove(g,p);
     const sell=cpuSell(g,p);if(sell)return sell;
+    /* 強い：修繕はアクションを使わずにいつでもできる。お金に余裕があれば、間に合う修繕を先に始める */
+    if(cpuStrong(p)&&p.money>=4000){const keepM=g.turn>=10?2500:1500;
+      for(let i=0;i<64;i++){const b=p.grid[i];if(!b||!b.destroyed||b.repairUntil||b.kind==="market"||b.kind==="warehouse")continue;
+        const rc=cpuRepairCost(g,p,b);if(!rc||p.money-rc.cost.money<keepM||!canAfford(p,rc.cost))continue;
+        const c=rc.cost.money+Object.values(rc.cost.res).reduce((a,b)=>a+b,0)*CPU_RES;if(cpuRepairValue(g,p,i,rc.dur)>c)return {kind:"repair",i}}}
     if(ts.stage==="gen"){const a=cpuGen(g,p);return a||{kind:"genNext"}}
     if(ts.stage==="choose")return {kind:"choose",action:cpuChoose(g,p)};
     return null;
